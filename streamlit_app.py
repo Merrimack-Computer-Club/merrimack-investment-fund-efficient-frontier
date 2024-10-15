@@ -123,8 +123,8 @@ if not tickers:
     tickers = [ticker.strip() for ticker in ticker_input.split(',')]
 
 # Fetch historical data
-start_date = st.date_input("Start Date", min_value=pd.to_datetime("1970-01-01") value=pd.to_datetime("2020-01-01"))
-end_date = st.date_input("End Date", max_value = pd.to_datetime("2024-01-01") value=pd.to_datetime("2024-01-01"))
+start_date = st.date_input("Start Date", min_value=pd.to_datetime("1970-01-01"), value=pd.to_datetime("2020-01-01"))
+end_date = st.date_input("End Date", max_value = pd.to_datetime("2024-01-01"), value=pd.to_datetime("2024-01-01"))
 
 # Option to choose input method for weights
 input_method = st.radio("Choose Input Method for Portfolio Weights", ('Slider', 'Number Input'))
