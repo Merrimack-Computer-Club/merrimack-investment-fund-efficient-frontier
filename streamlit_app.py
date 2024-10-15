@@ -207,7 +207,7 @@ if st.button("Compare to Market"):
     st.plotly_chart(comparison_fig)
 
 # Button to update portfolio
-if st.button("Update Portfolio"):
+if st.button("Deploy Efficient Frontier"):
     # Fetch historical data
     returns = get_data(tickers, start_date, end_date)
     mean_returns = returns.mean()
