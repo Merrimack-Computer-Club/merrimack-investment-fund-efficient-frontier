@@ -1,6 +1,3 @@
-Certainly! Here is the entire content in markdown format, including the code blocks and instructions:
-
-```markdown
 # Portfolio Optimization with Efficient Frontier
 
 This Streamlit application allows users to input a portfolio of stock tickers, select custom portfolio weights via interactive sliders, and visualize the portfolio's performance on the Efficient Frontier. The app provides insights into risk and return trade-offs and helps users find optimal portfolio allocations.
