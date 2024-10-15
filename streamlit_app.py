@@ -152,7 +152,7 @@ if np.sum(weights) != 1:
     weights = weights / np.sum(weights)
 
 # Slider to set the number of portfolios
-num_portfolios = st.slider("Select Number of Portfolios for Efficient Frontier", min_value=100, max_value=1000000, value=10000, step=1000)
+num_portfolios = st.slider("Select Number of Portfolios for Efficient Frontier", min_value=100, max_value=100000, value=10000, step=1000)
 
 # Dropdown to select the market index for comparison
 market_options = {
