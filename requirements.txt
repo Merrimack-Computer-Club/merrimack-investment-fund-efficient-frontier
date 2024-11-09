@@ -1,6 +1,6 @@
-streamlit
-numpy
-pandas
-yfinance
-scipy
-plotly
+numpy==2.1.3
+pandas==2.2.3
+plotly==5.24.1
+scipy==1.14.1
+streamlit==1.39.0
+yfinance==0.2.44
