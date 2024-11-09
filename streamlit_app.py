@@ -5,21 +5,69 @@ from scipy.optimize import minimize
 import plotly.graph_objs as go
 import streamlit as st
 
-# Step 1: Fetch historical stock prices
-def get_data(tickers, start_date, end_date):
-    data = yf.download(tickers, start=start_date, end=end_date)['Adj Close']
-    returns = data.pct_change().dropna()
-    return returns
+# Set the page layout as wide.
+st.set_page_config(page_title="Merrimack Computer Club Portfolio Analysis Tool", layout="wide", page_icon="assets/merrimack-computer-club.png")
 
-# Step 2: Portfolio performance calculations
-def portfolio_performance(weights, mean_returns, cov_matrix):
-    returns = np.sum(mean_returns * weights)
-    std_dev = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
-    sharpe_ratio = (returns - 0.01) / std_dev  # Assume risk-free rate = 0.01
-    return returns, std_dev, sharpe_ratio
+# Step 7: Streamlit app layout
+# Use Markdown to create custom header with image on the right
+st.title("Portfolio Optimization with Efficient Frontier and Historic Return Analyis")
+
+mk = '''
+This portfolio optimization and analysis tool helps users visualize and evaluate investment portfolios using the **efficient frontier**. It employs **mean-variance optimization** to calculate the optimal portfolio allocation for selected assets, such as stocks, mutual funds, ETFs, or other asset classes, and plots the trade-off between risk and return.
+
+### Key Features:
+
+1. **Efficient Frontier Calculation**:
+   - Computes the efficient frontier, representing the optimal portfolios offering the highest expected return for a given level of risk, based on historical asset returns.
+
+2. **Monte Carlo Simulation**:
+   - Uses **Monte Carlo simulation** to resample portfolio inputs and generate a range of possible outcomes, improving diversification and providing more robust performance insights.
+
+3. **Interactive User Interface**:
+   - An intuitive web-based interface to:
+     - Upload portfolio data or input tickers.
+     - Adjust risk-free rates, asset allocations, and parameters.
+     - Visualize performance metrics like expected return, volatility, and Sharpe ratio.
+
+4. **Portfolio Customization**:
+   - Allows users to specify asset allocations and constraints (e.g., ensuring weights sum to 1). Custom portfolios can be plotted on the efficient frontier for comparison.
+
+5. **Market Comparison**:
+   - Compares portfolio performance against major market indices (e.g., S&P 500, DJIA, NASDAQ), showing cumulative returns and daily rates of return.
+
+6. **Visualization**:
+   - Provides interactive charts for:
+     - The efficient frontier with portfolio points and custom portfolio.
+     - A correlation matrix of asset returns.
+     - Historical rate of return and cumulative return for both the portfolio and market indices.
+
+7. **Error Handling**:
+   - Includes error handling for smooth operation, with feedback for issues like missing data or invalid inputs.
+
+This tool empowers users to optimize portfolios, manage risk, and make informed decisions about asset allocation and performance.
+'''
+st.markdown(mk)
+
+# Step 1: Fetch historical stock prices with error handling
+def get_data(tickers, start_date, end_date):
+    try:
+        data = yf.download(tickers, start=start_date, end=end_date)['Adj Close']
+        returns = data.pct_change().dropna()
+        return returns
+    except Exception as e:
+        st.error(f"Error fetching data: {str(e)}")
+        return None
+
+# Step 2: Portfolio performance calculations with adjustable risk-free rate
+def portfolio_performance(weights, mean_returns, cov_matrix, risk_free_rate):
+    # Annualize returns and volatility
+    annualized_return = np.sum(mean_returns * weights) * 252  # Annualizing daily returns
+    annualized_std_dev = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights))) * np.sqrt(252)  # Annualizing volatility
+    sharpe_ratio = (annualized_return - risk_free_rate) / annualized_std_dev
+    return annualized_return, annualized_std_dev, sharpe_ratio
 
 # Step 3: Compute Efficient Frontier
-def efficient_frontier(mean_returns, cov_matrix, num_portfolios=100):
+def efficient_frontier(mean_returns, cov_matrix, num_portfolios=100, risk_free_rate=0.01):
     num_assets = len(mean_returns)
     results = np.zeros((3, num_portfolios))
     weights_record = []
@@ -27,7 +75,7 @@ def efficient_frontier(mean_returns, cov_matrix, num_portfolios=100):
     for i in range(num_portfolios):
         weights = np.random.random(num_assets)
         weights /= np.sum(weights)
-        returns, std_dev, sharpe_ratio = portfolio_performance(weights, mean_returns, cov_matrix)
+        returns, std_dev, sharpe_ratio = portfolio_performance(weights, mean_returns, cov_matrix, risk_free_rate)
         results[0, i] = std_dev
         results[1, i] = returns
         results[2, i] = sharpe_ratio  # Sharpe Ratio
@@ -62,7 +110,7 @@ def plot_efficient_frontier(results, weights_record, custom_weights, custom_retu
         f"Custom Portfolio:<br>{'<br>'.join(custom_portfolio_info)}<br>"
         f"Return: {custom_return:.2%}<br>"
         f"Volatility: {custom_std_dev:.2%}<br>"
-        f"Sharpe Ratio: {(custom_return - 0.01) / custom_std_dev:.2f}"
+        f"Sharpe Ratio: {(custom_return - risk_free_rate) / custom_std_dev:.2f}"
     )
 
     trace2 = go.Scatter(
@@ -84,75 +132,108 @@ def plot_efficient_frontier(results, weights_record, custom_weights, custom_retu
     fig = go.Figure(data=[trace1, trace2], layout=layout)
     return fig
 
-# Other code remains unchanged...
+# Step 5: Portfolio Summary Table
+def portfolio_summary_table(results, weights_record, tickers):
+    max_sharpe_idx = np.argmax(results[2])
+    min_var_idx = np.argmin(results[0])
 
-# Step 5: Streamlit app layout
-st.title("Portfolio Optimization with Efficient Frontier")
+    summary_data = {
+        'Portfolio': ['Maximum Sharpe Ratio', 'Minimum Variance'],
+        'Expected Return': [results[1, max_sharpe_idx], results[1, min_var_idx]],
+        'Expected Volatility': [results[0, max_sharpe_idx], results[0, min_var_idx]],
+        'Sharpe Ratio': [results[2, max_sharpe_idx], results[2, min_var_idx]],
+        'Weights': [weights_record[max_sharpe_idx], weights_record[min_var_idx]]
+    }
+    summary_df = pd.DataFrame(summary_data)
 
-# Allow user to upload CSV file
+    summary_df['Weights'] = summary_df['Weights'].apply(lambda w: ', '.join([f"{tickers[i]}: {w[i]:.2%}" for i in range(len(w))]))
+
+    st.subheader("Efficient Frontier Portfolio Summary")
+    st.write(summary_df)
+
+# Step 6: Correlation Matrix Display
+def display_correlation_matrix(returns, tickers):
+    st.subheader("Correlation Matrix")
+    correlation_matrix = returns.corr()
+    st.write(correlation_matrix)
+
+# CSV upload
 uploaded_file = st.file_uploader("Upload CSV File (TICKER, WEIGHT)", type=["csv"])
 
-# Initialize tickers and weights
 tickers = []
 weights = []
 
-# Handle file upload
 if uploaded_file is not None:
-    try:
-        # Read CSV into DataFrame
-        df = pd.read_csv(uploaded_file, header=None)
+    df = pd.read_csv(uploaded_file, header=None)
+    if df.shape[0] == 1:
+        tickers = df.iloc[0].tolist()
+    elif df.shape[0] == 2:
+        tickers = df.iloc[0].tolist()
+        weights = df.iloc[1].tolist()
+        if np.sum(weights) != 1:
+            st.warning("Weights do not sum to 1; normalizing weights.")
+            weights = weights / np.sum(weights)
+    else:
+        st.error("CSV must have one or two rows (Tickers and Weights).")
 
-        # Validate CSV format
-        if df.shape[0] == 1:
-            tickers = df.iloc[0].tolist()
-        elif df.shape[0] == 2:
-            tickers = df.iloc[0].tolist()
-            weights = df.iloc[1].tolist()
-            if np.sum(weights) != 1:
-                st.warning("Weights from CSV do not sum to 1. Normalizing them.")
-                weights = weights / np.sum(weights)
-        else:
-            st.error("CSV must have one or two rows (Tickers and Weights).")
-
-    except Exception as e:
-        st.error(f"Error reading the CSV file: {str(e)}")
-
-# Fallback to manual ticker input if no file is uploaded
 if not tickers:
     ticker_input = st.text_input("Enter Tickers (Comma Separated)", value="AAPL,MSFT,GOOGL,AMZN,TSLA")
     tickers = [ticker.strip() for ticker in ticker_input.split(',')]
 
-# Fetch historical data
-start_date = st.date_input("Start Date", min_value=pd.to_datetime("1970-01-01"), value=pd.to_datetime("2020-01-01"))
-end_date = st.date_input("End Date", max_value = pd.to_datetime("2024-01-01"), value=pd.to_datetime("2024-01-01"))
+start_date = st.date_input("Start Date", value=pd.to_datetime("2020-01-01"))
+# Function to get the last business day
+def get_last_business_day():
+    today = pd.to_datetime("today").normalize()  # Current date
+    # If today is a weekend (Saturday or Sunday), move to the previous Friday
+    if today.weekday() == 5:  # Saturday
+        last_business_day = today - pd.Timedelta(days=1)
+    elif today.weekday() == 6:  # Sunday
+        last_business_day = today - pd.Timedelta(days=2)
+    else:  # Weekdays
+        last_business_day = today
+    return last_business_day
 
-# Option to choose input method for weights
+# Set the end date to the last business day
+end_date = st.date_input("End Date", value=get_last_business_day())
+
+risk_free_rate = st.number_input("Set Risk-Free Rate (Annual)", min_value=0.0, max_value=1.0, value=0.0435, step=0.0001, format="%.4f", help="Risk-free rate for calculating Sharpe ratio")
+
 input_method = st.radio("Choose Input Method for Portfolio Weights", ('Slider', 'Number Input'))
-
 st.subheader("Input Portfolio Weights")
 
 if not weights:
-    # Default weights are evenly distributed
     weights = [1 / len(tickers)] * len(tickers)
 
-# Adjust weights dynamically based on input method
 for i, ticker in enumerate(tickers):
     if input_method == 'Slider':
         weight = st.slider(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], step=0.01)
         weights[i] = weight
-    else:  # Number Input
+    else:
         weight = st.number_input(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], step=0.01)
         weights[i] = weight
 
-st.write(f"Sum of weights: {sum(weights):.2f}")
-
-# Normalize weights to ensure they sum to 1
 weights = np.array(weights)
 if np.sum(weights) != 1:
+    st.warning("Weights do not sum to 1; normalizing weights.")
     weights = weights / np.sum(weights)
 
-# Slider to set the number of portfolios
-num_portfolios = st.slider("Select Number of Portfolios for Efficient Frontier", min_value=100, max_value=100000, value=10000, step=1000)
+num_portfolios = st.slider("Select Number of Portfolios for Efficient Frontier", min_value=100, max_value=10000, value=5000, step=100)
+
+if st.button("Deploy Efficient Frontier"):
+    returns = get_data(tickers, start_date, end_date)
+    if returns is not None:
+        display_correlation_matrix(returns, tickers)
+        mean_returns = returns.mean()
+        cov_matrix = returns.cov()
+        custom_return, custom_std_dev, custom_sharpe = portfolio_performance(weights, mean_returns, cov_matrix, risk_free_rate)
+        results, weights_record = efficient_frontier(mean_returns, cov_matrix, num_portfolios, risk_free_rate)
+        fig = plot_efficient_frontier(results, weights_record, weights, custom_return, custom_std_dev, tickers)
+        st.plotly_chart(fig)
+        st.subheader("Portfolio Performance Metrics")
+        st.write(f"Expected Return: {custom_return:.2%}")
+        st.write(f"Expected Volatility: {custom_std_dev:.2%}")
+        st.write(f"Sharpe Ratio: {(custom_return - risk_free_rate) / custom_std_dev:.2f}")
+        portfolio_summary_table(results, weights_record, tickers)
 
 # Dropdown to select the market index for comparison
 market_options = {
@@ -206,27 +287,25 @@ if st.button("Compare to Market"):
     # Display comparison plot
     st.plotly_chart(comparison_fig)
 
-# Button to update portfolio
-if st.button("Deploy Efficient Frontier"):
-    # Fetch historical data
-    returns = get_data(tickers, start_date, end_date)
-    mean_returns = returns.mean()
-    cov_matrix = returns.cov()
+    # Plot historical rate of return as cumulative percentage return
+    rate_of_return_fig = go.Figure()
 
-    # Compute portfolio performance for custom weights
-    custom_return, custom_std_dev, custom_sharpe = portfolio_performance(weights, mean_returns, cov_matrix)
+    # Calculate cumulative return as percentage
+    portfolio_cumulative_return = (1 + comparison_df['Portfolio']).cumprod() - 1
+    market_cumulative_return = (1 + comparison_df[selected_market]).cumprod() - 1
 
-    # Compute efficient frontier using the slider value
-    results, weights_record = efficient_frontier(mean_returns, cov_matrix, num_portfolios)
+    # Add traces for the cumulative return
+    rate_of_return_fig.add_trace(go.Scatter(x=comparison_df.index, y=portfolio_cumulative_return * 100, mode='lines', name='Selected Portfolio'))
+    rate_of_return_fig.add_trace(go.Scatter(x=comparison_df.index, y=market_cumulative_return * 100, mode='lines', name=selected_market))
 
-    # Plot efficient frontier and custom portfolio
-    fig = plot_efficient_frontier(results, weights_record, weights, custom_return, custom_std_dev, tickers)
+    # Update layout with appropriate titles and labels
+    rate_of_return_fig.update_layout(
+        title=f'Historical Rate of Return (Cumulative Percentage): Selected Portfolio vs {selected_market}',
+        xaxis_title='Date',
+        yaxis_title='Cumulative Return (%)',
+        legend_title='Legend',
+        template='plotly_white'
+    )
 
-    # Display the plot
-    st.plotly_chart(fig)
-
-    # Show additional metrics
-    st.subheader("Portfolio Performance Metrics")
-    st.write(f"Expected Return: {custom_return:.2%}")
-    st.write(f"Expected Volatility: {custom_std_dev:.2%}")
-    st.write(f"Sharpe Ratio: {(custom_return - 0.01) / custom_std_dev:.2f}")
+    # Display historical rate of return plot
+    st.plotly_chart(rate_of_return_fig)
