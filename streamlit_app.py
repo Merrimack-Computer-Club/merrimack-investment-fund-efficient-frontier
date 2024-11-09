@@ -18,7 +18,7 @@ This portfolio optimization and analysis tool helps users visualize and evaluate
 ### Key Features:
 
 1. **Efficient Frontier Calculation**:
-   - Computes the efficient frontier, representing the optimal portfolios offering the highest expected return for a given level of risk, based on historical asset returns.
+   - Computes the efficient frontier, representing the optimal portfolios offering the highest expected annual return for a given level of risk, based on historical asset returns.
 
 2. **Monte Carlo Simulation**:
    - Uses **Monte Carlo simulation** to resample portfolio inputs and generate a range of possible outcomes, improving diversification and providing more robust performance insights.
@@ -139,7 +139,7 @@ def portfolio_summary_table(results, weights_record, tickers):
 
     summary_data = {
         'Portfolio': ['Maximum Sharpe Ratio', 'Minimum Variance'],
-        'Expected Return': [results[1, max_sharpe_idx], results[1, min_var_idx]],
+        'Expected Annual Return': [results[1, max_sharpe_idx], results[1, min_var_idx]],
         'Expected Volatility': [results[0, max_sharpe_idx], results[0, min_var_idx]],
         'Sharpe Ratio': [results[2, max_sharpe_idx], results[2, min_var_idx]],
         'Weights': [weights_record[max_sharpe_idx], weights_record[min_var_idx]]
@@ -241,7 +241,7 @@ if st.button("Deploy Efficient Frontier"):
         fig = plot_efficient_frontier(results, weights_record, weights, custom_return, custom_std_dev, tickers)
         st.plotly_chart(fig)
         st.subheader("Portfolio Performance Metrics")
-        st.write(f"Expected Return: {custom_return:.2%}")
+        st.write(f"Expected Annual Return: {custom_return:.2%}")
         st.write(f"Expected Volatility: {custom_std_dev:.2%}")
         st.write(f"Sharpe Ratio: {(custom_return - risk_free_rate) / custom_std_dev:.2f}")
         portfolio_summary_table(results, weights_record, tickers)
