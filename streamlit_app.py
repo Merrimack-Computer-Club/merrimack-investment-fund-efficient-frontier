@@ -196,7 +196,18 @@ def get_last_business_day():
 # Set the end date to the last business day
 end_date = st.date_input("End Date", value=get_last_business_day())
 
-risk_free_rate = st.number_input("Set Risk-Free Rate (Annual)", min_value=0.0, max_value=1.0, value=0.0435, step=0.0001, format="%.4f", help="Risk-free rate for calculating Sharpe ratio")
+# Find the current risk free rate
+def get_risk_free_rate():
+    ticker = "^IRX"  # Symbol for 3-month US Treasury Bill yield
+    data = yf.Ticker(ticker)
+    # Get the most recent closing value of the yield
+    rate = data.history(period="1d")['Close'].iloc[-1] / 100  # Convert to decimal (e.g., 4.5% -> 0.045)
+    return rate
+
+# Get the current risk-free rate
+risk_free_rate = get_risk_free_rate()
+st.text(f'The current risk-free rate for a  3-month US Treasury Bill yield of {risk_free_rate:.4f}%')
+risk_free_rate = st.number_input("Set Risk-Free Rate (Annual)", min_value=0.0, max_value=1.0, value=risk_free_rate, step=0.0001, format="%.4f", help="Risk-free rate for calculating Sharpe ratio")
 
 input_method = st.radio("Choose Input Method for Portfolio Weights", ('Slider', 'Number Input'))
 st.subheader("Input Portfolio Weights")
