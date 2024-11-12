@@ -4,6 +4,7 @@ import yfinance as yf
 from scipy.optimize import minimize
 import plotly.graph_objs as go
 import streamlit as st
+import io
 
 # Set the page layout as wide.
 st.set_page_config(page_title="Merrimack Computer Club Portfolio Analysis Tool", layout="wide", page_icon="assets/merrimack-computer-club.png")
@@ -164,17 +165,20 @@ tickers = []
 weights = []
 
 if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file, header=None)
-    if df.shape[0] == 1:
-        tickers = df.iloc[0].tolist()
-    elif df.shape[0] == 2:
-        tickers = df.iloc[0].tolist()
-        weights = df.iloc[1].tolist()
-        if np.sum(weights) != 1:
-            st.warning("Weights do not sum to 1; normalizing weights.")
-            weights = weights / np.sum(weights)
-    else:
-        st.error("CSV must have one or two rows (Tickers and Weights).")
+    try:
+        df = pd.read_csv(uploaded_file, header=None)
+        if df.shape[0] == 1:
+            tickers = df.iloc[0].tolist()
+        elif df.shape[0] == 2:
+            tickers = df.iloc[0].tolist()
+            weights = df.iloc[1].tolist()
+            if np.sum(weights) != 1:
+                st.warning("Weights do not sum to 1; normalizing weights.")
+                weights = weights / np.sum(weights)
+        else:
+            st.error("CSV must have one or two rows (Tickers and Weights).")
+    except:
+        st.error(f'The dimensions of the given CSV file are incorrect. Please upload a file with two rows (ticker,weights); where the weights summate to 1.')
 
 if not tickers:
     ticker_input = st.text_input("Enter Tickers (Comma Separated)", value="AAPL,MSFT,GOOGL,AMZN,TSLA")
@@ -217,10 +221,10 @@ if not weights:
 
 for i, ticker in enumerate(tickers):
     if input_method == 'Slider':
-        weight = st.slider(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], step=0.01)
+        weight = st.slider(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], format="%0.3f", step=0.01)
         weights[i] = weight
     else:
-        weight = st.number_input(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], step=0.01)
+        weight = st.number_input(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], format="%0.3f", step=0.001)
         weights[i] = weight
 
 weights = np.array(weights)
@@ -229,6 +233,26 @@ if np.sum(weights) != 1:
     weights = weights / np.sum(weights)
 
 num_portfolios = st.slider("Select Number of Portfolios for Efficient Frontier", min_value=100, max_value=10000, value=5000, step=100)
+# Check if tickers or weights are empty
+if len(tickers) <= 0:
+    st.warning("No tickers or weights provided. Please input tickers and weights.")
+else:
+# Create a DataFrame with two rows: one for tickers and one for weights
+    df = pd.DataFrame([tickers, weights])
+
+    # Convert DataFrame to CSV
+    csv = df.to_csv(index=False, header=False)
+
+    # Convert the CSV string into a BytesIO object
+    csv_file = io.StringIO(csv)
+
+    # Add download button for CSV file
+    st.download_button(
+        label="Download CSV",
+        data=csv_file.getvalue(),
+        file_name="portfolio.csv",
+        mime="text/csv"
+    )
 
 if st.button("Deploy Efficient Frontier"):
     returns = get_data(tickers, start_date, end_date)
