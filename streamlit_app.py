@@ -171,15 +171,17 @@ if uploaded_file is not None:
             tickers = df.iloc[0].tolist()
         elif df.shape[0] == 2:
             tickers = df.iloc[0].tolist()
-            weights = df.iloc[1].tolist()
+            weights = df.iloc[1].apply(pd.to_numeric, errors='coerce')
+            weights = weights.tolist()
+            print(weights)
             if np.sum(weights) != 1:
                 st.warning("Weights do not sum to 1; normalizing weights.")
                 weights = weights / np.sum(weights)
         else:
             st.error("CSV must have one or two rows (Tickers and Weights).")
     except:
-        st.error(f'The dimensions of the given CSV file are incorrect. Please upload a file with two rows (ticker,weights); where the weights summate to 1.')
-
+        st.error("Error parsing given CSV file.")
+        
 if not tickers:
     ticker_input = st.text_input("Enter Tickers (Comma Separated)", value="AAPL,MSFT,GOOGL,AMZN,TSLA")
     tickers = [ticker.strip() for ticker in ticker_input.split(',')]
@@ -221,7 +223,7 @@ if not weights:
 
 for i, ticker in enumerate(tickers):
     if input_method == 'Slider':
-        weight = st.slider(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], format="%0.3f", step=0.01)
+        weight = st.slider(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], format="%0.3f", step=0.001)
         weights[i] = weight
     else:
         weight = st.number_input(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], format="%0.3f", step=0.001)
