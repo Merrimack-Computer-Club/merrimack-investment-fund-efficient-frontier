@@ -219,7 +219,7 @@ risk_free_rate = st.number_input("Set Risk-Free Rate (Annual)", min_value=0.0, m
 input_method = st.radio("Choose Input Method for Portfolio Weights", ('Slider', 'Number Input'))
 st.subheader("Input Portfolio Weights")
 
-if not weights.any():
+if len(weights) <= 0:
     weights = [1 / len(tickers)] * len(tickers)
 
 for i, ticker in enumerate(tickers):
