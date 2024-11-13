@@ -173,6 +173,7 @@ if uploaded_file is not None:
             tickers = df.iloc[0].tolist()
             weights = df.iloc[1].apply(pd.to_numeric, errors='coerce')
             weights = weights.tolist()
+            print(tickers)
             print(weights)
             if np.sum(weights) != 1:
                 st.warning("Weights do not sum to 1; normalizing weights.")
@@ -218,15 +219,15 @@ risk_free_rate = st.number_input("Set Risk-Free Rate (Annual)", min_value=0.0, m
 input_method = st.radio("Choose Input Method for Portfolio Weights", ('Slider', 'Number Input'))
 st.subheader("Input Portfolio Weights")
 
-if not weights:
+if not weights.any():
     weights = [1 / len(tickers)] * len(tickers)
 
 for i, ticker in enumerate(tickers):
     if input_method == 'Slider':
-        weight = st.slider(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], format="%0.3f", step=0.001)
+        weight = st.slider(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], format="%0.4f", step=0.0001)
         weights[i] = weight
     else:
-        weight = st.number_input(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], format="%0.3f", step=0.001)
+        weight = st.number_input(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], format="%0.4f", step=0.0001)
         weights[i] = weight
 
 weights = np.array(weights)
