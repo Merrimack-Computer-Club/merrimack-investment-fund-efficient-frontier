@@ -301,9 +301,6 @@ def display_alpha_beta(results, weights_record, weights, tickers, start_date, en
 
 # Step 10: Add graph for tickers most likely to be big performers in the next year
 def display_top_performers(mean_returns, tickers):
-
-    print(mean_returns)
-
     # Example DataFrame where the tickers are the index and returns are the values
     data = {
         "Mean Returns": mean_returns
@@ -319,18 +316,11 @@ def display_top_performers(mean_returns, tickers):
     top_tickers = df_sorted.index.to_numpy()  # Extract tickers
     top_returns = df_sorted["Mean Returns"].to_numpy()  # Extract returns
 
-    # Display the results
-    print("Top Tickers:", top_tickers)
-    print("Top Returns:", top_returns)
-
     # Custom color scale from dark gold to bright gold
     color_scale = [
         [0, 'rgb(204, 153, 0)'],  # Darker gold
         [1, 'rgb(255, 215, 0)']   # Bright gold
     ]
-
-    print(top_tickers)
-    print(top_returns)
 
     # Plot the bar chart with the custom color scale
     fig = go.Figure()
