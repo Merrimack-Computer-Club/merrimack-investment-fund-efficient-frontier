@@ -239,6 +239,71 @@ def portfolio_backtest(results, weights_record, selected_weights, tickers, start
     # Display historical rate of return plot
     st.plotly_chart(rate_of_return_fig)
 
+def calculate_alpha_beta(portfolio_returns, market_returns, risk_free_rate):
+    """
+    Calculate alpha and beta for a portfolio using the CAPM model.
+    Alpha is the excess return relative to the market, adjusted for risk-free rate.
+    Beta measures the systematic risk of the portfolio.
+    """
+    # Ensure both series are tz-naive
+    portfolio_returns.index = portfolio_returns.index.tz_localize(None)
+    market_returns.index = market_returns.index.tz_localize(None)
+
+    # Ensure both series have the same length and drop NaN values
+    combined_df = pd.concat([portfolio_returns, market_returns], axis=1).dropna()
+    portfolio_returns = combined_df.iloc[:, 0]
+    market_returns = combined_df.iloc[:, 1]
+
+    # Perform linear regression to calculate beta (slope) and alpha (intercept)
+    X = market_returns.values.reshape(-1, 1)  # Independent variable (market returns)
+    y = portfolio_returns.values              # Dependent variable (portfolio returns)
+    X = np.hstack([np.ones_like(X), X])       # Add column for intercept
+    coef = np.linalg.lstsq(X, y, rcond=None)[0]  # Solve for regression coefficients
+    intercept, beta = coef[0], coef[1]        # Intercept and slope from regression
+
+    # Calculate average returns
+    R = portfolio_returns.sum()         # Portfolio return
+    Rm = market_returns.sum()          # Market return
+
+    # Calculate alpha using the CAPM formula
+    alpha = (R - risk_free_rate) - beta * (Rm - risk_free_rate)
+
+    return alpha, beta
+
+
+
+def display_alpha_beta(results, weights_record, weights, tickers, start_date, end_date, risk_free_rate):
+    """
+    Calculate and display alpha and beta for the selected and optimized portfolios.
+    """
+    # Fetch portfolio returns and market returns
+    returns = get_data(tickers, start_date, end_date)
+    if returns is not None:
+        selected_portfolio_returns = (returns * weights).sum(axis=1)
+        max_sharpe_idx = np.argmax(results[2])
+        optimized_weights = weights_record[max_sharpe_idx]
+        optimized_portfolio_returns = (returns * optimized_weights).sum(axis=1)
+
+        # Fetch market data
+        market_symbol = market_options[selected_market]
+        market_data = yf.download(market_symbol, start=start_date, end=end_date)['Adj Close']
+        market_returns = market_data.pct_change().dropna()
+
+        # Calculate alpha and beta for both portfolios
+        selected_alpha, selected_beta = calculate_alpha_beta(selected_portfolio_returns, market_returns, risk_free_rate)
+        optimized_alpha, optimized_beta = calculate_alpha_beta(optimized_portfolio_returns, market_returns, risk_free_rate)
+
+        # Create a DataFrame to display the results
+        data = {
+            "Portfolio": ["Selected Portfolio", "Optimized Portfolio"],
+            "Alpha": [selected_alpha, optimized_alpha],
+            "Beta": [selected_beta, optimized_beta]
+        }
+        summary_df = pd.DataFrame(data)
+
+        # Display the table
+        st.write(summary_df)
+
 ##################################################################################
 #                                                                                #
 # Application UI                                                                 #
@@ -358,8 +423,10 @@ if st.button("Deploy Efficient Frontier"):
         st.write(f"Expected Volatility: {custom_std_dev:.2%}")
         st.write(f"Sharpe Ratio: {(custom_return - risk_free_rate) / custom_std_dev:.2f}")
         portfolio_summary_table(results, weights_record, tickers)
-        st.subheader("Optimized Portfolio Backtest")
+        st.subheader("Optimized & Select Portfolio Backtest")
         portfolio_backtest(results, weights_record, weights, tickers, start_date, end_date)
+        st.subheader("Optimized & Selected Portfolio Alpha,Beta")
+        display_alpha_beta(results, weights_record, weights, tickers, start_date, end_date, risk_free_rate)
 
 if st.button("Compare to Market"):
     selected_weights = weights
