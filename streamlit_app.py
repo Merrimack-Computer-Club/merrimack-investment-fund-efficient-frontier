@@ -158,7 +158,6 @@ def portfolio_summary_table(results, weights_record, tickers):
 
 # Step 6: Correlation Matrix Display
 def display_correlation_matrix(returns, tickers):
-    st.subheader("Correlation Matrix")
     correlation_matrix = returns.corr()
     st.write(correlation_matrix)
 
@@ -235,6 +234,7 @@ def portfolio_backtest(results, weights_record, selected_weights, tickers, start
     # Display historical rate of return plot
     st.plotly_chart(rate_of_return_fig)
 
+# Step 8: Calculate the R alpha using CAPM forumula, beta using slope of regression through volitilty.
 def calculate_alpha_beta(portfolio_returns, market_returns, risk_free_rate):
     """
     Calculate alpha and beta for a portfolio using the CAPM model.
@@ -266,8 +266,7 @@ def calculate_alpha_beta(portfolio_returns, market_returns, risk_free_rate):
 
     return alpha, beta
 
-
-
+# Step 9: display the alpha and beta in a readable table
 def display_alpha_beta(results, weights_record, weights, tickers, start_date, end_date, risk_free_rate):
     """
     Calculate and display alpha and beta for the selected and optimized portfolios.
@@ -299,6 +298,61 @@ def display_alpha_beta(results, weights_record, weights, tickers, start_date, en
 
         # Display the table
         st.write(summary_df)
+
+# Step 10: Add graph for tickers most likely to be big performers in the next year
+def display_top_performers(mean_returns, tickers):
+
+    print(mean_returns)
+
+    # Example DataFrame where the tickers are the index and returns are the values
+    data = {
+        "Mean Returns": mean_returns
+    }
+
+    # Create DataFrame
+    df = pd.DataFrame(data, index=tickers)
+
+    # Sort the DataFrame by 'Mean Returns' column in descending order
+    df_sorted = df.sort_values(by="Mean Returns", ascending=False)
+
+    # Extract top tickers and their associated returns as arrays
+    top_tickers = df_sorted.index.to_numpy()  # Extract tickers
+    top_returns = df_sorted["Mean Returns"].to_numpy()  # Extract returns
+
+    # Display the results
+    print("Top Tickers:", top_tickers)
+    print("Top Returns:", top_returns)
+
+    # Custom color scale from dark gold to bright gold
+    color_scale = [
+        [0, 'rgb(204, 153, 0)'],  # Darker gold
+        [1, 'rgb(255, 215, 0)']   # Bright gold
+    ]
+
+    print(top_tickers)
+    print(top_returns)
+
+    # Plot the bar chart with the custom color scale
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=top_tickers[:10],  # Show top 10 performers
+        y=top_returns[:10],
+        name='Top Performers',
+        marker=dict(
+            color=top_returns[:10],  # Apply color based on the returns
+            colorscale=color_scale,  # Use the custom color scale
+            showscale=True           # Show the color scale bar
+        )
+    ))
+
+    fig.update_layout(
+        title='Top 10 Most Likely Big Performers in the Next Year',
+        xaxis_title='Ticker',
+        yaxis_title='Expected Return',
+        template='plotly_white'
+    )
+
+    st.plotly_chart(fig)
 
 ##################################################################################
 #                                                                                #
@@ -419,7 +473,6 @@ num_portfolios = st.slider("Select Number of Portfolios for Efficient Frontier",
 if st.button("Deploy Efficient Frontier"):
     returns = get_data(tickers, start_date, end_date)
     if returns is not None:
-        display_correlation_matrix(returns, tickers)
         mean_returns = returns.mean()
         cov_matrix = returns.cov()
         custom_return, custom_std_dev, custom_sharpe = portfolio_performance(weights, mean_returns, cov_matrix, risk_free_rate)
@@ -435,6 +488,10 @@ if st.button("Deploy Efficient Frontier"):
         portfolio_backtest(results, weights_record, weights, tickers, start_date, end_date)
         st.subheader("Optimized & Selected Portfolio Alpha,Beta")
         display_alpha_beta(results, weights_record, weights, tickers, start_date, end_date, risk_free_rate)
+        st.subheader("Correlation Matrix")
+        display_correlation_matrix(returns, tickers)
+        st.subheader("Predictive Strongest Performers (Mean-Annual Return Prediction)")
+        display_top_performers(mean_returns, tickers)
         # Download CSV for Optimized Portfolio
         # Create a DataFrame with two rows: one for tickers and one for weights
         max_sharpe_idx = np.argmax(results[2])
