@@ -381,8 +381,6 @@ with st.sidebar:
             # Extend the weights array by adding 0 for the new tickers
             weights = np.concatenate([weights, np.zeros(len(tickers) - len(weights))])
 
-        print(weights)
-
         for i, ticker in enumerate(tickers):
             if input_method == 'Slider':
                 weight = st.slider(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], format="%0.4f", step=0.0001)
