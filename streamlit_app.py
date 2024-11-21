@@ -23,7 +23,7 @@ mcc_image = f"""
 st.markdown(mcc_image, unsafe_allow_html=True)
 
 # Use Markdown to create custom header with image on the right
-st.title("Merrimack College Managed Fund - Portfolio Analysis Tool")
+st.title("Merrimack College Student Managed Fund - Portfolio Analysis Tool")
 
 # Add logo
 mk = '''
