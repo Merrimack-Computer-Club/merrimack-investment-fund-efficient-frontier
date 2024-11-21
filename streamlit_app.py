@@ -490,7 +490,7 @@ if st.button("Deploy Efficient Frontier"):
         display_alpha_beta(results, weights_record, weights, tickers, start_date, end_date, risk_free_rate)
         st.subheader("Correlation Matrix")
         display_correlation_matrix(returns, tickers)
-        st.subheader("Predictive Strongest Performers (Mean-Annual Return Prediction)")
+        st.subheader("Predictive Strongest Performers (Mean-Return Analysis)")
         display_top_performers(mean_returns, tickers)
         # Download CSV for Optimized Portfolio
         # Create a DataFrame with two rows: one for tickers and one for weights
