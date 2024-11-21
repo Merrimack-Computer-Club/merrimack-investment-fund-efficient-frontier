@@ -9,40 +9,27 @@ import io
 # Set the page layout as wide.
 st.set_page_config(page_title="Merrimack Computer Club Portfolio Analysis Tool", layout="wide", page_icon="assets/merrimack-computer-club.png")
 
+st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSixZF48ZnadAhRjcI-4_g8pCN4nDtLYabSNg&s", width=100)
+
+
 # Use Markdown to create custom header with image on the right
 st.title("Merrimack College Managed Fund - Portfolio Analysis Tool")
 
+# Add logo
 mk = '''
-This portfolio optimization and analysis tool helps users visualize and evaluate investment portfolios using the **efficient frontier**. It employs **mean-variance optimization** to calculate the optimal portfolio allocation for selected assets, such as stocks, mutual funds, ETFs, or other asset classes, and plots the trade-off between risk and return.
+This tool helps users visualize and optimize investment portfolios using the **efficient frontier**. It calculates the optimal portfolio allocation for various assets and plots the trade-off between risk and return.
 
-### Key Features:
+## Key Features
 
-1. **Efficient Frontier Calculation**:
-   - Computes the efficient frontier, representing the optimal portfolios offering the highest expected annual return for a given level of risk, based on historical asset returns.
-
-2. **Monte Carlo Simulation**:
-   - Uses **Monte Carlo simulation** to resample portfolio inputs and generate a range of possible outcomes, improving diversification and providing more robust performance insights.
-
-3. **Interactive User Interface**:
-   - An intuitive web-based interface to:
-     - Upload portfolio data or input tickers.
-     - Adjust risk-free rates, asset allocations, and parameters.
-     - Visualize performance metrics like expected return, volatility, and Sharpe ratio.
-
-4. **Portfolio Customization**:
-   - Allows users to specify asset allocations and constraints (e.g., ensuring weights sum to 1). Custom portfolios can be plotted on the efficient frontier for comparison.
-
-5. **Market Comparison**:
-   - Compares portfolio performance against major market indices (e.g., S&P 500, DJIA, NASDAQ), showing cumulative returns and daily rates of return.
-
-6. **Visualization**:
-   - Provides interactive charts for:
-     - The efficient frontier with portfolio points and custom portfolio.
-     - A correlation matrix of asset returns.
-     - Historical rate of return and cumulative return for both the portfolio and market indices.
-
-7. **Error Handling**:
-   - Includes error handling for smooth operation, with feedback for issues like missing data or invalid inputs.
+- **Efficient Frontier**: Identify optimal portfolios for the best risk-return balance.
+- **Monte Carlo Simulation**: Enhance diversification with robust outcome projections.
+- **Portfolio Customization**: Adjust allocations, set constraints, and analyze key metrics like return, volatility, and Sharpe ratio.
+- **Market Comparison**: Benchmark performance against indices such as S&P 500 and NASDAQ.
+- **Backtesting**: Review historical performance for selected and optimized portfolios.
+- **Alpha & Beta Analysis**: Evaluate excess returns and market risk using CAPM metrics.
+- **Interactive Tools**: Seamlessly upload/download CSVs, fine-tune weights, and integrate dynamic risk-free rates.
+- **Visualization**: Explore interactive charts for efficient frontiers, asset correlations, and cumulative returns.
+- **Error Handling**: Ensure smooth operations with clear feedback and issue resolution.
 
 This tool empowers users to optimize portfolios, manage risk, and make informed decisions about asset allocation and performance.
 '''
@@ -55,7 +42,6 @@ market_options = {
     "Russell 1000": "^RUI",
     "NASDAQ": "^IXIC"
 }
-selected_market = st.selectbox("Select Market Index to Compare", list(market_options.keys()))
 
 # Step 1: Fetch historical stock prices with error handling
 def get_data(tickers, start_date, end_date):
@@ -157,7 +143,7 @@ def portfolio_summary_table(results, weights_record, tickers):
 
     summary_df['Weights'] = summary_df['Weights'].apply(lambda w: ', '.join([f"{tickers[i]}: {w[i]:.2%}" for i in range(len(w))]))
 
-    st.subheader("Efficient Frontier Portfolio Summary")
+    st.subheader("Portfolio Summary: Efficient Frontier")
     st.write(summary_df)
 
 # Step 6: Correlation Matrix Display
@@ -310,103 +296,107 @@ def display_alpha_beta(results, weights_record, weights, tickers, start_date, en
 #                                                                                #                                               
 ##################################################################################
 
+with st.sidebar:
+        st.header("Portfolio Selection")
+        # CSV upload
+        uploaded_file = st.file_uploader("Upload CSV File (TICKER, WEIGHT)", type=["csv"])
 
-# CSV upload
-uploaded_file = st.file_uploader("Upload CSV File (TICKER, WEIGHT)", type=["csv"])
+        tickers = []
+        weights = []
 
-tickers = []
-weights = []
+        if uploaded_file is not None:
+            try:
+                df = pd.read_csv(uploaded_file, header=None)
+                if df.shape[0] == 1:
+                    tickers = df.iloc[0].tolist()
+                elif df.shape[0] == 2:
+                    tickers = df.iloc[0].tolist()
+                    weights = df.iloc[1].apply(pd.to_numeric, errors='coerce')
+                    weights = weights.tolist()
+                    if np.sum(weights) != 1:
+                        st.warning("Weights do not sum to 1; normalizing weights.")
+                        weights = weights / np.sum(weights)
+                else:
+                    st.error("CSV must have one or two rows (Tickers and Weights).")
+            except:
+                st.error("Error parsing given CSV file.")
+                
+        if not tickers:
+            ticker_input = st.text_input("Enter Tickers (Comma Separated)", value="AAPL,MSFT,GOOGL,AMZN,TSLA")
+            tickers = [ticker.strip() for ticker in ticker_input.split(',')]
 
-if uploaded_file is not None:
-    try:
-        df = pd.read_csv(uploaded_file, header=None)
-        if df.shape[0] == 1:
-            tickers = df.iloc[0].tolist()
-        elif df.shape[0] == 2:
-            tickers = df.iloc[0].tolist()
-            weights = df.iloc[1].apply(pd.to_numeric, errors='coerce')
-            weights = weights.tolist()
-            if np.sum(weights) != 1:
-                st.warning("Weights do not sum to 1; normalizing weights.")
-                weights = weights / np.sum(weights)
+        start_date = st.date_input("Start Date", value=pd.to_datetime("2020-01-01"))
+        # Function to get the last business day
+        def get_last_business_day():
+            today = pd.to_datetime("today").normalize()  # Current date
+            # If today is a weekend (Saturday or Sunday), move to the previous Friday
+            if today.weekday() == 5:  # Saturday
+                last_business_day = today - pd.Timedelta(days=1)
+            elif today.weekday() == 6:  # Sunday
+                last_business_day = today - pd.Timedelta(days=2)
+            else:  # Weekdays
+                last_business_day = today
+            return last_business_day
+
+        # Set the end date to the last business day
+        end_date = st.date_input("End Date", value=get_last_business_day())
+
+        # Find the current risk free rate
+        def get_risk_free_rate():
+            ticker = "^TNX"  # Symbol for 10 year US Treasury Bill yield
+            data = yf.Ticker(ticker)
+            # Get the most recent closing value of the yield
+            rate = data.history(period="1d")['Close'].iloc[-1] / 100  # Convert to decimal (e.g., 4.5% -> 0.045)
+            return rate
+
+        # Set the selected comparison market index
+        selected_market = st.selectbox("Select Market Index to Compare", list(market_options.keys()))
+
+        # Get the current risk-free rate
+        risk_free_rate = get_risk_free_rate()
+        st.text(f'The current risk-free rate for a  10-year US Treasury Bill yield of {risk_free_rate:.4f}%')
+        risk_free_rate = st.number_input("Set Risk-Free Rate (Annual)", min_value=0.0, max_value=1.0, value=risk_free_rate, step=0.0001, format="%.4f", help="Risk-free rate for calculating Sharpe ratio.")
+
+        input_method = st.radio("Choose Input Method for Portfolio Weights", ('Slider', 'Number Input'))
+        st.subheader("Input Portfolio Weights")
+
+        if len(weights) <= 0:
+            weights = [1 / len(tickers)] * len(tickers)
+
+        for i, ticker in enumerate(tickers):
+            if input_method == 'Slider':
+                weight = st.slider(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], format="%0.4f", step=0.0001)
+                weights[i] = weight
+            else:
+                weight = st.number_input(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], format="%0.4f", step=0.0001)
+                weights[i] = weight
+
+        weights = np.array(weights)
+        if np.sum(weights) != 1:
+            st.warning("Weights do not sum to 1; normalizing weights.")
+            weights = weights / np.sum(weights)
+
+        num_portfolios = st.slider("Select Number of Portfolios for Efficient Frontier", min_value=100, max_value=10000, value=5000, step=100)
+        # Check if tickers or weights are empty
+        if len(tickers) <= 0:
+            st.warning("No tickers or weights provided. Please input tickers and weights.")
         else:
-            st.error("CSV must have one or two rows (Tickers and Weights).")
-    except:
-        st.error("Error parsing given CSV file.")
-        
-if not tickers:
-    ticker_input = st.text_input("Enter Tickers (Comma Separated)", value="AAPL,MSFT,GOOGL,AMZN,TSLA")
-    tickers = [ticker.strip() for ticker in ticker_input.split(',')]
+            # Create a DataFrame with two rows: one for tickers and one for weights
+            df = pd.DataFrame([tickers, weights])
 
-start_date = st.date_input("Start Date", value=pd.to_datetime("2020-01-01"))
-# Function to get the last business day
-def get_last_business_day():
-    today = pd.to_datetime("today").normalize()  # Current date
-    # If today is a weekend (Saturday or Sunday), move to the previous Friday
-    if today.weekday() == 5:  # Saturday
-        last_business_day = today - pd.Timedelta(days=1)
-    elif today.weekday() == 6:  # Sunday
-        last_business_day = today - pd.Timedelta(days=2)
-    else:  # Weekdays
-        last_business_day = today
-    return last_business_day
+            # Convert DataFrame to CSV
+            csv = df.to_csv(index=False, header=False)
 
-# Set the end date to the last business day
-end_date = st.date_input("End Date", value=get_last_business_day())
+            # Convert the CSV string into a BytesIO object
+            csv_file = io.StringIO(csv)
 
-# Find the current risk free rate
-def get_risk_free_rate():
-    ticker = "^TNX"  # Symbol for 10 year US Treasury Bill yield
-    data = yf.Ticker(ticker)
-    # Get the most recent closing value of the yield
-    rate = data.history(period="1d")['Close'].iloc[-1] / 100  # Convert to decimal (e.g., 4.5% -> 0.045)
-    return rate
-
-# Get the current risk-free rate
-risk_free_rate = get_risk_free_rate()
-st.text(f'The current risk-free rate for a  10-year US Treasury Bill yield of {risk_free_rate:.4f}%')
-risk_free_rate = st.number_input("Set Risk-Free Rate (Annual)", min_value=0.0, max_value=1.0, value=risk_free_rate, step=0.0001, format="%.4f", help="Risk-free rate for calculating Sharpe ratio.")
-
-input_method = st.radio("Choose Input Method for Portfolio Weights", ('Slider', 'Number Input'))
-st.subheader("Input Portfolio Weights")
-
-if len(weights) <= 0:
-    weights = [1 / len(tickers)] * len(tickers)
-
-for i, ticker in enumerate(tickers):
-    if input_method == 'Slider':
-        weight = st.slider(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], format="%0.4f", step=0.0001)
-        weights[i] = weight
-    else:
-        weight = st.number_input(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], format="%0.4f", step=0.0001)
-        weights[i] = weight
-
-weights = np.array(weights)
-if np.sum(weights) != 1:
-    st.warning("Weights do not sum to 1; normalizing weights.")
-    weights = weights / np.sum(weights)
-
-num_portfolios = st.slider("Select Number of Portfolios for Efficient Frontier", min_value=100, max_value=10000, value=5000, step=100)
-# Check if tickers or weights are empty
-if len(tickers) <= 0:
-    st.warning("No tickers or weights provided. Please input tickers and weights.")
-else:
-# Create a DataFrame with two rows: one for tickers and one for weights
-    df = pd.DataFrame([tickers, weights])
-
-    # Convert DataFrame to CSV
-    csv = df.to_csv(index=False, header=False)
-
-    # Convert the CSV string into a BytesIO object
-    csv_file = io.StringIO(csv)
-
-    # Add download button for CSV file
-    st.download_button(
-        label="Download CSV",
-        data=csv_file.getvalue(),
-        file_name="portfolio.csv",
-        mime="text/csv"
-    )
+            # Add download button for CSV file
+            st.download_button(
+                label="Download Portfolio CSV",
+                data=csv_file.getvalue(),
+                file_name="portfolio.csv",
+                mime="text/csv"
+            )
 
 if st.button("Deploy Efficient Frontier"):
     returns = get_data(tickers, start_date, end_date)
@@ -427,3 +417,19 @@ if st.button("Deploy Efficient Frontier"):
         portfolio_backtest(results, weights_record, weights, tickers, start_date, end_date)
         st.subheader("Optimized & Selected Portfolio Alpha,Beta")
         display_alpha_beta(results, weights_record, weights, tickers, start_date, end_date, risk_free_rate)
+        # Download CSV for Optimized Portfolio
+        # Create a DataFrame with two rows: one for tickers and one for weights
+        max_sharpe_idx = np.argmax(results[2])
+        optimized_portfolio_weights = weights_record[max_sharpe_idx]
+        df = pd.DataFrame([tickers, optimized_portfolio_weights])
+        # Convert DataFrame to CSV
+        csv = df.to_csv(index=False, header=False)
+        # Convert the CSV string into a BytesIO object
+        csv_file = io.StringIO(csv)
+        # Add download button for CSV file
+        st.download_button(
+            label="Download Optimized Portfolio CSV",
+            data=csv_file.getvalue(),
+            file_name="optimized-portfolio.csv",
+            mime="text/csv"
+        )
