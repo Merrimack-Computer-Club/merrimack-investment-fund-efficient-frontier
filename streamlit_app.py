@@ -331,9 +331,12 @@ with st.sidebar:
             except:
                 st.error("Error parsing given CSV file.")
                 
+        # Set default tickers if none exist.
         if not tickers:
-            ticker_input = st.text_input("Enter Tickers (Comma Separated)", value="AAPL,MSFT,GOOGL,AMZN,TSLA")
-            tickers = [ticker.strip() for ticker in ticker_input.split(',')]
+            tickers = ["AAPL","MSFT","GOOGL","AMZN","TSLA"]
+
+        ticker_input = st.text_input("Enter Tickers (Comma Separated)", value=','.join(tickers))
+        tickers = [ticker.strip() for ticker in ticker_input.split(',')]
 
         start_date = st.date_input("Start Date", value=pd.to_datetime("2020-01-01"))
         # Function to get the last business day
@@ -373,6 +376,13 @@ with st.sidebar:
         if len(weights) <= 0:
             weights = [1 / len(tickers)] * len(tickers)
 
+        if len(weights) < len(tickers):  # If the ticker-weight matrix is not square
+            st.warning("A new ticker has been added, please review wights as they may have been adjusted.")
+            # Extend the weights array by adding 0 for the new tickers
+            weights = np.concatenate([weights, np.zeros(len(tickers) - len(weights))])
+
+        print(weights)
+
         for i, ticker in enumerate(tickers):
             if input_method == 'Slider':
                 weight = st.slider(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], format="%0.4f", step=0.0001)
@@ -386,7 +396,6 @@ with st.sidebar:
             st.warning("Weights do not sum to 1; normalizing weights.")
             weights = weights / np.sum(weights)
 
-        num_portfolios = st.slider("Select Number of Portfolios for Efficient Frontier", min_value=100, max_value=10000, value=5000, step=100)
         # Check if tickers or weights are empty
         if len(tickers) <= 0:
             st.warning("No tickers or weights provided. Please input tickers and weights.")
@@ -408,6 +417,7 @@ with st.sidebar:
                 mime="text/csv"
             )
 
+num_portfolios = st.slider("Select Number of Portfolios for Efficient Frontier", min_value=100, max_value=10000, value=5000, step=100)
 if st.button("Deploy Efficient Frontier"):
     returns = get_data(tickers, start_date, end_date)
     if returns is not None:
