@@ -15,7 +15,7 @@ st.set_page_config(page_title="Merrimack Computer Club Portfolio Analysis Tool",
 # Page Information Ref.
 mcc_image = f"""
 <a href="{WEBSITE_URL}" target="_blank">
-    <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSixZF48ZnadAhRjcI-4_g8pCN4nDtLYabSNg&s" alt="Merrimack Computer Club Website" style="width:100;">
+    <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSixZF48ZnadAhRjcI-4_g8pCN4nDtLYabSNg&s" alt="Merrimack Computer Club Website" style="width:100; text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);">
 </a>
 """
 
@@ -306,13 +306,13 @@ def display_alpha_beta(results, weights_record, weights, tickers, start_date, en
 #                                                                                #                                               
 ##################################################################################
 
+tickers = []
+weights = []
+
 with st.sidebar:
         st.header("Portfolio Selection")
         # CSV upload
         uploaded_file = st.file_uploader("Upload CSV File (TICKER, WEIGHT)", type=["csv"])
-
-        tickers = []
-        weights = []
 
         if uploaded_file is not None:
             try:
@@ -376,7 +376,7 @@ with st.sidebar:
         if len(weights) <= 0:
             weights = [1 / len(tickers)] * len(tickers)
 
-        if len(weights) < len(tickers):  # If the ticker-weight matrix is not square
+        elif len(weights) < len(tickers):  # If the ticker-weight matrix is not square
             st.warning("A new ticker has been added, please review wights as they may have been adjusted.")
             # Extend the weights array by adding 0 for the new tickers
             weights = np.concatenate([weights, np.zeros(len(tickers) - len(weights))])
@@ -427,9 +427,9 @@ if st.button("Deploy Efficient Frontier"):
         fig = plot_efficient_frontier(results, weights_record, weights, custom_return, custom_std_dev, tickers)
         st.plotly_chart(fig)
         st.subheader("Portfolio Performance Metrics")
-        st.write(f"Expected Annual Return: {custom_return:.2%}")
-        st.write(f"Expected Volatility: {custom_std_dev:.2%}")
-        st.write(f"Sharpe Ratio: {(custom_return - risk_free_rate) / custom_std_dev:.2f}")
+        st.write(f"Expected Annual Return: {custom_return:.3%}")
+        st.write(f"Expected Volatility: {custom_std_dev:.3%}")
+        st.write(f"Sharpe Ratio: {(custom_return - risk_free_rate) / custom_std_dev:.3f}")
         portfolio_summary_table(results, weights_record, tickers)
         st.subheader("Optimized & Select Portfolio Backtest")
         portfolio_backtest(results, weights_record, weights, tickers, start_date, end_date)
@@ -452,7 +452,7 @@ if st.button("Deploy Efficient Frontier"):
             mime="text/csv"
         )
 
-# Page Information Ref.
+# Page Information Ref. -- footer
 linkedin_image = f"""
 <div style="
     position: fixed;
