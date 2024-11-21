@@ -352,6 +352,7 @@ def display_top_performers(mean_returns, tickers):
 
 tickers = []
 weights = []
+sub_portfolio_percentage = 0.25
 
 with st.sidebar:
         st.header("Portfolio Selection")
@@ -438,6 +439,8 @@ with st.sidebar:
             st.warning("Weights do not sum to 1; normalizing weights.")
             weights = weights / np.sum(weights)
 
+        sub_portfolio_percentage = st.number_input("Set Sub-portfolio Weighting", min_value=0.0, max_value=1.0, value=sub_portfolio_percentage, step=0.0001, format="%.4f", help="Sub-portfolio weighting.")
+
         # Check if tickers or weights are empty
         if len(tickers) <= 0:
             st.warning("No tickers or weights provided. Please input tickers and weights.")
@@ -482,11 +485,33 @@ if st.button("Deploy Efficient Frontier"):
         display_correlation_matrix(returns, tickers)
         st.subheader("Predictive Strongest Performers (Mean-Return Analysis)")
         display_top_performers(mean_returns, tickers)
-        # Download CSV for Optimized Portfolio
-        # Create a DataFrame with two rows: one for tickers and one for weights
+        st.subheader("Subportfolio Header")
         max_sharpe_idx = np.argmax(results[2])
         optimized_portfolio_weights = weights_record[max_sharpe_idx]
         df = pd.DataFrame([tickers, optimized_portfolio_weights])
+        # Scale the optimized portfolio weights
+        scaled_weights = optimized_portfolio_weights * sub_portfolio_percentage
+
+        # Create a DataFrame to display the stock tickers and their scaled weights
+        scaled_weights_df = pd.DataFrame({
+            "Ticker": tickers,
+            "Weight (%)": scaled_weights * 100
+        })
+
+        # Display the table in the app
+        st.table(scaled_weights_df)
+
+        # Option to download the scaled weights as CSV
+        csv_scaled = scaled_weights_df.to_csv(index=False)
+        st.download_button(
+            label="Download Sub-portfolio CSV",
+            data=csv_scaled,
+            file_name="sub-portfolio.csv",
+            mime="text/csv"
+        )
+
+        # Download CSV for Optimized Portfolio
+        # Create a DataFrame with two rows: one for tickers and one for weights
         # Convert DataFrame to CSV
         csv = df.to_csv(index=False, header=False)
         # Convert the CSV string into a BytesIO object
@@ -498,6 +523,11 @@ if st.button("Deploy Efficient Frontier"):
             file_name="optimized-portfolio.csv",
             mime="text/csv"
         )
+
+      
+
+
+            
 
 # Page Information Ref. -- footer
 linkedin_image = f"""
