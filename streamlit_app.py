@@ -1,16 +1,26 @@
 import numpy as np
 import pandas as pd
 import yfinance as yf
-from scipy.optimize import minimize
 import plotly.graph_objs as go
 import streamlit as st
 import io
 
-# Set the page layout as wide.
+# Author tag
+AUTHOR_URL = "https://www.linkedin.com/in/alex-elguezabal/"
+WEBSITE_URL = "https://merrimackcomputer.club/"
+
+# Set the page configuration and layout as wide.
 st.set_page_config(page_title="Merrimack Computer Club Portfolio Analysis Tool", layout="wide", page_icon="assets/merrimack-computer-club.png")
 
-st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSixZF48ZnadAhRjcI-4_g8pCN4nDtLYabSNg&s", width=100)
+# Page Information Ref.
+mcc_image = f"""
+<a href="{WEBSITE_URL}" target="_blank">
+    <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSixZF48ZnadAhRjcI-4_g8pCN4nDtLYabSNg&s" alt="Merrimack Computer Club Website" style="width:100;">
+</a>
+"""
 
+# Render the clickable image
+st.markdown(mcc_image, unsafe_allow_html=True)
 
 # Use Markdown to create custom header with image on the right
 st.title("Merrimack College Managed Fund - Portfolio Analysis Tool")
@@ -433,3 +443,22 @@ if st.button("Deploy Efficient Frontier"):
             file_name="optimized-portfolio.csv",
             mime="text/csv"
         )
+
+# Page Information Ref.
+linkedin_image = f"""
+<div style="
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    background-color: #f1f1f1;
+    text-align: center;
+    padding: 10px;
+    font-size: small;
+    ">
+    © 2024 Merrimack Computer Club | <a href="https://github.com/Merrimack-Computer-Club" target="_blank">Github</a> Authors Alexander Elguezabal <a href="{AUTHOR_URL}" target="_blank">LinkedIn</a>
+
+</div>
+"""
+
+# Render the clickable image
+st.markdown(linkedin_image, unsafe_allow_html=True)
