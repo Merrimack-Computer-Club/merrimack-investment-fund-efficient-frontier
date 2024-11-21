@@ -9,9 +9,8 @@ import io
 # Set the page layout as wide.
 st.set_page_config(page_title="Merrimack Computer Club Portfolio Analysis Tool", layout="wide", page_icon="assets/merrimack-computer-club.png")
 
-# Step 7: Streamlit app layout
 # Use Markdown to create custom header with image on the right
-st.title("Portfolio Optimization with Efficient Frontier and Historic Return Analyis")
+st.title("Merrimack College Managed Fund - Portfolio Analysis Tool")
 
 mk = '''
 This portfolio optimization and analysis tool helps users visualize and evaluate investment portfolios using the **efficient frontier**. It employs **mean-variance optimization** to calculate the optimal portfolio allocation for selected assets, such as stocks, mutual funds, ETFs, or other asset classes, and plots the trade-off between risk and return.
@@ -48,6 +47,15 @@ This portfolio optimization and analysis tool helps users visualize and evaluate
 This tool empowers users to optimize portfolios, manage risk, and make informed decisions about asset allocation and performance.
 '''
 st.markdown(mk)
+
+# Dropdown to select the market index for comparison
+market_options = {
+    "S&P 500": "^GSPC",
+    "DJIA": "^DJI",
+    "Russell 1000": "^RUI",
+    "NASDAQ": "^IXIC"
+}
+selected_market = st.selectbox("Select Market Index to Compare", list(market_options.keys()))
 
 # Step 1: Fetch historical stock prices with error handling
 def get_data(tickers, start_date, end_date):
@@ -139,7 +147,7 @@ def portfolio_summary_table(results, weights_record, tickers):
     min_var_idx = np.argmin(results[0])
 
     summary_data = {
-        'Portfolio': ['Maximum Sharpe Ratio', 'Minimum Variance'],
+        'Portfolio': ['Maximum Sharpe Ratio (Optimized Portfolio)', 'Minimum Variance'],
         'Expected Annual Return': [results[1, max_sharpe_idx], results[1, min_var_idx]],
         'Expected Volatility': [results[0, max_sharpe_idx], results[0, min_var_idx]],
         'Sharpe Ratio': [results[2, max_sharpe_idx], results[2, min_var_idx]],
@@ -158,6 +166,86 @@ def display_correlation_matrix(returns, tickers):
     correlation_matrix = returns.corr()
     st.write(correlation_matrix)
 
+# Step 7: Portfolio & Optimized Portfolio Backtest
+def portfolio_backtest(results, weights_record, selected_weights, tickers, start_date, end_date):
+    max_sharpe_idx = np.argmax(results[2])
+    # Fetch historical data for the selected portfolio
+    selected_portfolio_returns = get_data(tickers, start_date, end_date)
+    weighted_portfolio_returns = (selected_portfolio_returns * selected_weights).sum(axis=1)
+    optimized_portfolio_weights = weights_record[max_sharpe_idx]
+    weighted_optimized_portfolio_returns = (selected_portfolio_returns * optimized_portfolio_weights).sum(axis=1)
+
+    # Convert portfolio returns index to timezone-naive
+    weighted_portfolio_returns.index = weighted_portfolio_returns.index.tz_localize(None)
+    weighted_optimized_portfolio_returns.index = weighted_optimized_portfolio_returns.index.tz_localize(None)
+
+    # Fetch historical data for the selected market index
+    market_symbol = market_options[selected_market]
+    market_data = yf.download(market_symbol, start=start_date, end=end_date)['Adj Close']
+    market_returns = market_data.pct_change().dropna()
+
+    # Convert market returns index to timezone-naive
+    market_returns.index = market_returns.index.tz_localize(None)
+
+    # Create comparison DataFrame
+    comparison_df = pd.DataFrame({
+        'Optimized Portfolio': weighted_optimized_portfolio_returns,
+        'Selected Portfolio': weighted_portfolio_returns,
+        selected_market: market_returns
+    })
+
+    # Drop rows with NaN values that may arise due to date mismatches
+    comparison_df = comparison_df.dropna()
+
+    # Plot comparison
+    comparison_fig = go.Figure()
+    comparison_fig.add_trace(go.Scatter(x=comparison_df.index, y=comparison_df['Optimized Portfolio'], mode='lines', name='Optimized Portfolio'))
+    comparison_fig.add_trace(go.Scatter(x=comparison_df.index, y=comparison_df['Selected Portfolio'], mode='lines', name='Selected Portfolio'))
+    comparison_fig.add_trace(go.Scatter(x=comparison_df.index, y=comparison_df[selected_market], mode='lines', name=selected_market))
+
+    comparison_fig.update_layout(
+        title=f'Historical Returns: Optimized Portfolio vs Selected Portfolio vs {selected_market}',
+        xaxis_title='Date',
+        yaxis_title='Cumulative Returns',
+        legend_title='Legend',
+        template='plotly_white'
+    )
+
+    # Display comparison plot
+    st.plotly_chart(comparison_fig)
+
+    # Plot historical rate of return as cumulative percentage return
+    rate_of_return_fig = go.Figure()
+
+    # Calculate cumulative return as percentage
+    optimized_portfolio_cumulative_return = (1 + comparison_df['Optimized Portfolio']).cumprod() - 1
+    selected_portfolio_cumulative_return = (1 + comparison_df['Selected Portfolio']).cumprod() - 1
+    market_cumulative_return = (1 + comparison_df[selected_market]).cumprod() - 1
+
+    # Add traces for the cumulative return
+    rate_of_return_fig.add_trace(go.Scatter(x=comparison_df.index, y=optimized_portfolio_cumulative_return * 100, mode='lines', name='Optimized Portfolio'))
+    rate_of_return_fig.add_trace(go.Scatter(x=comparison_df.index, y=selected_portfolio_cumulative_return * 100, mode='lines', name='Selected Portfolio'))
+    rate_of_return_fig.add_trace(go.Scatter(x=comparison_df.index, y=market_cumulative_return * 100, mode='lines', name=selected_market))
+
+    # Update layout with appropriate titles and labels
+    rate_of_return_fig.update_layout(
+        title=f'Historical Rate of Return (Cumulative Percentage): Optimized Portfolio vs Selected Portfolio vs {selected_market}',
+        xaxis_title='Date',
+        yaxis_title='Cumulative Return (%)',
+        legend_title='Legend',
+        template='plotly_white'
+    )
+
+    # Display historical rate of return plot
+    st.plotly_chart(rate_of_return_fig)
+
+##################################################################################
+#                                                                                #
+# Application UI                                                                 #
+#                                                                                #                                               
+##################################################################################
+
+
 # CSV upload
 uploaded_file = st.file_uploader("Upload CSV File (TICKER, WEIGHT)", type=["csv"])
 
@@ -173,8 +261,6 @@ if uploaded_file is not None:
             tickers = df.iloc[0].tolist()
             weights = df.iloc[1].apply(pd.to_numeric, errors='coerce')
             weights = weights.tolist()
-            print(tickers)
-            print(weights)
             if np.sum(weights) != 1:
                 st.warning("Weights do not sum to 1; normalizing weights.")
                 weights = weights / np.sum(weights)
@@ -272,16 +358,9 @@ if st.button("Deploy Efficient Frontier"):
         st.write(f"Expected Volatility: {custom_std_dev:.2%}")
         st.write(f"Sharpe Ratio: {(custom_return - risk_free_rate) / custom_std_dev:.2f}")
         portfolio_summary_table(results, weights_record, tickers)
+        st.subheader("Optimized Portfolio Backtest")
+        portfolio_backtest(results, weights_record, weights, tickers, start_date, end_date)
 
-# Dropdown to select the market index for comparison
-market_options = {
-    "S&P 500": "^GSPC",
-    "DJIA": "^DJI",
-    "Russell 1000": "^RUI",
-    "NASDAQ": "^IXIC"
-}
-
-selected_market = st.selectbox("Select Market Index to Compare", list(market_options.keys()))
 if st.button("Compare to Market"):
     selected_weights = weights
 
