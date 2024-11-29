@@ -74,7 +74,7 @@ Here’s a quick example of how to use the app:
 
 ## Screenshots
 
-![App Screenshot](screenshot.png)  <!-- Add a screenshot of your app here -->
+![App Screenshot](assets/merrimack-smf-application-screenshot.png)  <!-- Add a screenshot of your app here -->
 
 ## License
 
