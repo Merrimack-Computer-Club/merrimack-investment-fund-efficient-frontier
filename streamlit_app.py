@@ -427,11 +427,12 @@ with st.sidebar:
             weights = np.concatenate([weights, np.zeros(len(tickers) - len(weights))])
 
         for i, ticker in enumerate(tickers):
+            name = yf.Ticker(ticker).get_info()['shortName']
             if input_method == 'Slider':
-                weight = st.slider(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], format="%0.4f", step=0.0001)
+                weight = st.slider(f"Weight for {ticker} ({name}):", min_value=0.0, max_value=1.0, value=weights[i], format="%0.4f", step=0.0001)
                 weights[i] = weight
             else:
-                weight = st.number_input(f"Weight for {ticker}:", min_value=0.0, max_value=1.0, value=weights[i], format="%0.4f", step=0.0001)
+                weight = st.number_input(f"Weight for {ticker} ({name}):", min_value=0.0, max_value=1.0, value=weights[i], format="%0.4f", step=0.0001)
                 weights[i] = weight
 
         weights = np.array(weights)
@@ -462,7 +463,13 @@ with st.sidebar:
                 mime="text/csv"
             )
 
-num_portfolios = st.slider("Select Number of Portfolios for Efficient Frontier", min_value=100, max_value=10000, value=5000, step=100)
+num_portfolios=5000
+num_portfolios_input_method = st.radio("Select Number of Portfolios for Efficient Frontier", ('Slider', 'Number Input'))
+if num_portfolios_input_method=='Slider': 
+    num_portfolios = st.slider("Select Number of Portfolios for Efficient Frontier", min_value=100, max_value=10000, value=5000, step=100)
+else:
+    num_portfolios = st.number_input("Number of Portfolios", min_value=100, value=num_portfolios)
+
 if st.button("Deploy Efficient Frontier"):
     returns = get_data(tickers, start_date, end_date)
     if returns is not None:
