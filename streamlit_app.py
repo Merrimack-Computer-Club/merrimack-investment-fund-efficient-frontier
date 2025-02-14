@@ -154,7 +154,37 @@ def portfolio_summary_table(results, weights_record, tickers):
     summary_df['Weights'] = summary_df['Weights'].apply(lambda w: ', '.join([f"{tickers[i]}: {w[i]:.2%}" for i in range(len(w))]))
 
     st.subheader("Portfolio Summary: Efficient Frontier")
-    st.write(summary_df)
+
+    #####################################################
+    #
+    #   Sharpe Ratio Dataframe
+    #
+    #####################################################
+
+    # Create a DataFrame to store portfolio statistics
+    summary_sharpe_df = pd.DataFrame({
+        'Expected Annual Return': results[1],
+        'Expected Volatility': results[0],
+        'Sharpe Ratio': results[2],
+        'Weights': weights_record
+    })
+
+    # Sort by Sharpe Ratio in descending order
+    summary_sharpe_df = summary_sharpe_df.sort_values(by='Sharpe Ratio', ascending=False).reset_index(drop=True)
+
+    # Convert weights to readable format
+    summary_sharpe_df['Weights'] = summary_sharpe_df['Weights'].apply(
+        lambda w: ', '.join([f"{tickers[i]}: {w[i]:.2%}" for i in range(len(w))])
+    )
+
+    summary, sharp_ratio = st.tabs(["🗃 Summary", "📈 Sharp Ratio Data"])
+    
+    summary.subheader("Summary of Efficient Frontier")
+    summary.write(summary_df)    
+    sharp_ratio.subheader("Portfolios sorted by Sharpe Ratio")
+    sharp_ratio.dataframe(summary_sharpe_df.style.format({"Expected Annual Return": "{:.2%}", 
+                                          "Expected Volatility": "{:.2%}", 
+                                          "Sharpe Ratio": "{:.4f}"}))
 
 # Step 6: Correlation Matrix Display
 def display_correlation_matrix(returns, tickers):
