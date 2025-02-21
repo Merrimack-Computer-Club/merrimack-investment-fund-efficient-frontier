@@ -434,7 +434,11 @@ with st.sidebar:
             ticker = "^TNX"  # Symbol for 10 year US Treasury Bill yield
             data = yf.Ticker(ticker)
             # Get the most recent closing value of the yield
-            rate = data.history(period="1d")['Close'].iloc[-1] / 100  # Convert to decimal (e.g., 4.5% -> 0.045)
+            rate = data.history(period="1d")
+            # If there is an error getting the Risk free rate, give 0.0
+            if(len(rate) == 0):
+                return 0.0
+            rate = rate['Close'].iloc[-1] / 100  # Convert to decimal (e.g., 4.5% -> 0.045)
             return rate
 
         # Set the selected comparison market index
