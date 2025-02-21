@@ -4,6 +4,8 @@ import yfinance as yf
 import plotly.graph_objs as go
 import streamlit as st
 import io
+import requests
+from fp.fp import FreeProxy
 
 # Author tag
 AUTHOR_URL = "https://www.linkedin.com/in/alex-elguezabal/"
@@ -53,10 +55,28 @@ market_options = {
     "NASDAQ": "^IXIC"
 }
 
+# Proxy function so we don't get rate limited
+def get_proxy():
+    """Fetches a free proxy and returns it in a usable format."""
+    try:
+        proxy_url = FreeProxy(rand=True, timeout=5).get()
+        return {"http": proxy_url, "https": proxy_url}
+    except Exception as e:
+        print(f"Error getting proxy: {e}")
+        return None
+    
+# Create Session
+proxies = get_proxy()
+print(f"Using proxy: {proxies}")
+
+# Create a session and set the proxy
+session = requests.Session()
+session.proxies.update(proxies) 
+
 # Step 1: Fetch historical stock prices with error handling
 def get_data(tickers, start_date, end_date):
     try:
-        data = yf.download(tickers, start=start_date, end=end_date)['Adj Close']
+        data = yf.download(tickers, start=start_date, end=end_date, session=session)['Adj Close']
         returns = data.pct_change().dropna()
         return returns
     except Exception as e:
@@ -206,7 +226,7 @@ def portfolio_backtest(results, weights_record, selected_weights, tickers, start
 
     # Fetch historical data for the selected market index
     market_symbol = market_options[selected_market]
-    market_data = yf.download(market_symbol, start=start_date, end=end_date)['Adj Close']
+    market_data = yf.download(market_symbol, start=start_date, end=end_date, session=session)['Adj Close']
     market_returns = market_data.pct_change().dropna()
 
     # Convert market returns index to timezone-naive
@@ -311,7 +331,7 @@ def display_alpha_beta(results, weights_record, weights, tickers, start_date, en
 
         # Fetch market data
         market_symbol = market_options[selected_market]
-        market_data = yf.download(market_symbol, start=start_date, end=end_date)['Adj Close']
+        market_data = yf.download(market_symbol, start=start_date, end=end_date, session=session)['Adj Close']
         market_returns = market_data.pct_change().dropna()
 
         # Calculate alpha and beta for both portfolios
@@ -432,7 +452,7 @@ with st.sidebar:
         # Find the current risk free rate
         def get_risk_free_rate():
             ticker = "^TNX"  # Symbol for 10 year US Treasury Bill yield
-            data = yf.Ticker(ticker)
+            data = yf.Ticker(ticker, session=session)
             # Get the most recent closing value of the yield
             rate = data.history(period="1d")
             # If there is an error getting the Risk free rate, give 0.0
@@ -461,7 +481,7 @@ with st.sidebar:
             weights = np.concatenate([weights, np.zeros(len(tickers) - len(weights))])
 
         for i, ticker in enumerate(tickers):
-            name = yf.Ticker(ticker).get_info()['shortName']
+            name = yf.Ticker(ticker, session=session).get_info()['shortName']
             if input_method == 'Slider':
                 weight = st.slider(f"Weight for {ticker} ({name}):", min_value=0.0, max_value=1.0, value=weights[i], format="%0.4f", step=0.0001)
                 weights[i] = weight
