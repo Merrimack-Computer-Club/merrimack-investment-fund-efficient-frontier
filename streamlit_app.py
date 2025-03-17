@@ -6,6 +6,9 @@ import streamlit as st
 import io
 import requests
 from fp.fp import FreeProxy
+import certifi
+
+#print(yf.Ticker("GOOGL"), )
 
 # Author tag
 AUTHOR_URL = "https://www.linkedin.com/in/alex-elguezabal/"
@@ -60,6 +63,7 @@ def get_proxy():
     """Fetches a free proxy and returns it in a usable format."""
     try:
         proxy_url = FreeProxy(rand=True, timeout=5).get()
+        print(f"Selected Proxy: {proxy_url}")
         return {"http": proxy_url, "https": proxy_url}
     except Exception as e:
         print(f"Error getting proxy: {e}")
@@ -67,11 +71,17 @@ def get_proxy():
     
 # Create Session
 proxies = get_proxy()
+requests.adapters.DEFAULT_CA_BUNDLE_PATH = certifi.where()
+
 print(f"Using proxy: {proxies}")
 
-# Create a session and set the proxy
+goog = yf.Ticker("GOOG", proxy=proxies["https"])
+print(goog.info)
+
+# Create a session and set the proxy, disable SSL verification
 session = requests.Session()
-session.proxies.update(proxies) 
+session.proxies.update(proxies)
+session.verify = False  # Disable SSL verification
 
 # Step 1: Fetch historical stock prices with error handling
 def get_data(tickers, start_date, end_date):
@@ -452,7 +462,7 @@ with st.sidebar:
         # Find the current risk free rate
         def get_risk_free_rate():
             ticker = "^TNX"  # Symbol for 10 year US Treasury Bill yield
-            data = yf.Ticker(ticker, session=session)
+            data = yf.Ticker(ticker)
             # Get the most recent closing value of the yield
             rate = data.history(period="1d")
             # If there is an error getting the Risk free rate, give 0.0
