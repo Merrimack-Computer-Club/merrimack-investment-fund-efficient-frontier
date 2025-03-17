@@ -33,12 +33,13 @@ def test_proxy(proxy_list):
     for proxy in proxy_list:
         try:
             proxy_dict = {"http": f"http://{proxy}", "https": f"https://{proxy}"}  # Format proxy for requests
-            response_http =  yf.Ticker("GOOG", proxy["http"])  # Test proxy connection: http
-            response_https =  yf.Ticker("GOOG", proxy["https"])  # Test proxy connection: http
+            response_http =  yf.Ticker("GOOG", proxy=proxy_dict["http"])  # Test proxy connection: http
+            response_https =  yf.Ticker("GOOG", proxy=proxy_dict["https"])  # Test proxy connection: http
         
             print(f"✅ Working Proxy: {proxy}")
             return proxy  # Return the first working proxy
-        except:
+        except Exception as e:
+            #print(traceback.format_exc())
             print(f"Failed proxy: ${proxy}")
             continue  # If a proxy fails, try the next one
 
