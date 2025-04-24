@@ -10,33 +10,11 @@ This Streamlit application allows users to input a portfolio of stock tickers, s
 - **Custom Portfolio Comparison**: Users can compare their custom portfolio to the Efficient Frontier.
 - **Interactive Visualization**: The results are displayed on an interactive graph using Plotly, where the Efficient Frontier and the custom portfolio are plotted.
 
-## Requirements
-
-The following Python packages are required to run the app:
-
-- `streamlit`
-- `yfinance`
-- `numpy`
-- `pandas`
-- `scipy`
-- `plotly`
-
-You can install them using `pip`:
-
-```bash
-pip install streamlit yfinance numpy pandas scipy plotly
-```
-
 ## Getting Started
 
 ### Step 1: Clone the Repository
 
 First, clone this repository to your local machine.
-
-```bash
-git clone <repository-url>
-cd <repository-folder>
-```
 
 ### Step 2: Install Dependencies
 
@@ -51,7 +29,7 @@ pip install -r requirements.txt
 To start the Streamlit application, run the following command in your terminal:
 
 ```bash
-streamlit run portfolio_optimizer.py
+streamlit run streamlit_app.py
 ```
 
 This will start a local web server and open the app in your browser.
