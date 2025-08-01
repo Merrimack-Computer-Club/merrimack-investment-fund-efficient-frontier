@@ -56,7 +56,7 @@ market_options = {
 # Step 1: Fetch historical stock prices with error handling
 def get_data(tickers, start_date, end_date):
     try:
-        data = yf.download(tickers, start=start_date, end=end_date)['Adj Close']
+        data = yf.download(tickers, start=start_date, end=end_date, auto_adjust=True)['Close']
         returns = data.pct_change().dropna()
         return returns
     except Exception as e:
@@ -206,8 +206,8 @@ def portfolio_backtest(results, weights_record, selected_weights, tickers, start
 
     # Fetch historical data for the selected market index
     market_symbol = market_options[selected_market]
-    market_data = yf.download(market_symbol, start=start_date, end=end_date)['Adj Close']
-    market_returns = market_data.pct_change().dropna()
+    market_data = yf.download(market_symbol, start=start_date, end=end_date, auto_adjust=True)['Close']
+    market_returns = market_data.pct_change().dropna().squeeze()
 
     # Convert market returns index to timezone-naive
     market_returns.index = market_returns.index.tz_localize(None)
@@ -311,7 +311,7 @@ def display_alpha_beta(results, weights_record, weights, tickers, start_date, en
 
         # Fetch market data
         market_symbol = market_options[selected_market]
-        market_data = yf.download(market_symbol, start=start_date, end=end_date)['Adj Close']
+        market_data = yf.download(market_symbol, start=start_date, end=end_date, auto_adjust=True)['Close']
         market_returns = market_data.pct_change().dropna()
 
         # Calculate alpha and beta for both portfolios
