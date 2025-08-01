@@ -22,7 +22,7 @@ This app helps identify potential mean reversion opportunities by comparing a st
 # --- Sidebar Selection ---
 index_option = st.sidebar.selectbox(
     "Choose a Market Index",
-    options=["", "S&P 500 (USA)", "FTSE 100 (UK)", "Nikkei 225 (Japan)"]
+    options=["", "S&P 500 (USA)", "NASDAQ-100 (USA)", "Dow Jones (USA)", "FTSE 100 (UK)", "Nikkei 225 (Japan)", "SSE Composite (China)"]
 )
 
 # --- Ticker Loaders ---
@@ -41,19 +41,42 @@ def get_index_tickers(index_name):
             url = "https://en.wikipedia.org/wiki/FTSE_100_Index"
             response = requests.get(url)
             soup = BeautifulSoup(response.text, 'html.parser')
-            table = soup.find_all('table')[1]  # Second table is correct
+            table = soup.find_all('table')[6]  # Fourth table is correct
             df = pd.read_html(StringIO(str(table)))[0]
-            df = df[['EPIC', 'Company']].rename(columns={'EPIC': 'Ticker'})
-            df['Ticker'] = df['Ticker'].astype(str) + ".L"  # Add .L for London
+            df = df[['Company', 'Ticker']].rename(columns={'Company': 'Company', 'Ticker': 'Ticker'})
+
+        elif index_name == "NASDAQ-100 (USA)":
+            url = 'https://en.wikipedia.org/wiki/NASDAQ-100'
+            soup = BeautifulSoup(requests.get(url).text, 'html.parser')
+            table = soup.find('table', {'id': 'constituents'})
+            df = pd.read_html(StringIO(str(table)))[0]
+            df = df[['Ticker', 'Company']]
+
+        elif index_name == "Dow Jones (USA)":
+            url = 'https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average'
+            soup = BeautifulSoup(requests.get(url).text, 'html.parser')
+            table = soup.find('table', {'id': 'constituents'})
+            df = pd.read_html(StringIO(str(table)))[0]
+            df = df[['Symbol', 'Company']].rename(columns={'Symbol': 'Ticker'})
 
         elif index_name == "Nikkei 225 (Japan)":
-            url = "https://en.wikipedia.org/wiki/Nikkei_225"
-            response = requests.get(url)
-            soup = BeautifulSoup(response.text, 'html.parser')
+            # Using list from TopForeignStocks.com with validated tickers :contentReference[oaicite:1]{index=1}
+            url = "https://topforeignstocks.com/indices/the-components-of-the-nikkei-225-index/"
+            soup = BeautifulSoup(requests.get(url).text, 'html.parser')
             table = soup.find('table')
             df = pd.read_html(StringIO(str(table)))[0]
             df = df[['Code', 'Company']].rename(columns={'Code': 'Ticker'})
-            df['Ticker'] = df['Ticker'].astype(str).str.zfill(4) + ".T"  # Add .T for Tokyo
+            df['Ticker'] = df['Ticker'].astype(str).str.zfill(4) + '.T'
+
+        elif index_name == "SSE Composite (China)":
+            # Use table from Investing.com or TradingView for Shanghai Composite :contentReference[oaicite:2]{index=2}
+            url = "https://www.investing.com/indices/shanghai-composite-components"
+            soup = BeautifulSoup(requests.get(url).text, 'html.parser')
+            table = soup.find('table')
+            df = pd.read_html(StringIO(str(table)))[0]
+            df = df.rename(columns={'Name': 'Company'})
+            df['Ticker'] = df['Name'].apply(lambda x: x.replace(' ', '')) + '.SS'
+            df = df[['Ticker', 'Company']]
 
         else:
             return pd.DataFrame()
