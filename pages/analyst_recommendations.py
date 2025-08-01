@@ -7,7 +7,7 @@ import requests
 from datetime import datetime, timedelta, timezone
 
 st.set_page_config(page_title="S&P 500 Analyst Reversion Tool", layout="wide")
-st.title("S&P 500 Analyst Mean Reversion Tool")
+st.title("📊 S&P 500 Analyst Mean Reversion Tool")
 
 @st.cache_data(show_spinner=False)
 def get_sp500_tickers():
@@ -21,10 +21,7 @@ def get_sp500_tickers():
 @st.cache_data(show_spinner=True)
 def get_stock_data(tickers):
     results = []
-
-    # Use timezone-aware UTC datetimes
     end_date = datetime.now(timezone.utc)
-    start_date = end_date - timedelta(days=365)
     thirty_days_ago = end_date - timedelta(days=30)
     ytd_start = datetime(end_date.year, 1, 1, tzinfo=timezone.utc)
 
@@ -32,17 +29,17 @@ def get_stock_data(tickers):
         try:
             stock = yf.Ticker(ticker)
             hist = stock.history(period="1y")
-            if hist.empty:
+
+            if hist.empty or len(hist) < 2:
                 continue
 
             current_price = hist['Close'].iloc[-1]
-            last_close = hist['Close'].iloc[-2] if len(hist) > 1 else np.nan
+            last_close = hist['Close'].iloc[-2]
 
-            price_30d_ago = hist.loc[thirty_days_ago:]['Close'].iloc[0]
-            price_ytd = hist.loc[ytd_start:]['Close'].iloc[0]
+            price_30d_ago = hist[hist.index >= thirty_days_ago]['Close'].iloc[0]
+            price_ytd = hist[hist.index >= ytd_start]['Close'].iloc[0]
             price_year_ago = hist['Close'].iloc[0]
 
-            recs = stock.recommendations
             mean_target = stock.info.get('targetMeanPrice', np.nan)
 
             results.append({
@@ -50,18 +47,27 @@ def get_stock_data(tickers):
                 "Company": stock.info.get("shortName", ""),
                 "Current Price": current_price,
                 "Last Close": last_close,
-                "30D Change (%)": ((current_price - price_30d_ago) / price_30d_ago) * 100,
-                "YTD Change (%)": ((current_price - price_ytd) / price_ytd) * 100,
-                "1Y Change (%)": ((current_price - price_year_ago) / price_year_ago) * 100,
+                "30D Change": ((current_price - price_30d_ago) / price_30d_ago) * 100,
+                "YTD Change": ((current_price - price_ytd) / price_ytd) * 100,
+                "1Y Change": ((current_price - price_year_ago) / price_year_ago) * 100,
                 "Mean Analyst Target": mean_target,
-                "Target vs Current (%)": ((mean_target - current_price) / current_price) * 100 if mean_target else np.nan
+                "Upside to Target": ((mean_target - current_price) / current_price) * 100 if pd.notna(mean_target) else np.nan
             })
 
         except Exception as e:
             print(f"Error for {ticker}: {e}")
             continue
 
-    return pd.DataFrame(results)
+    df = pd.DataFrame(results)
+
+    # Format numeric columns
+    for col in ["Current Price", "Last Close", "Mean Analyst Target"]:
+        df[col] = df[col].map(lambda x: f"${x:.2f}" if pd.notna(x) else "—")
+
+    for col in ["30D Change", "YTD Change", "1Y Change", "Upside to Target"]:
+        df[col] = df[col].map(lambda x: f"{x:+.2f}%" if pd.notna(x) else "—")
+
+    return df
 
 sp500_df = get_sp500_tickers()
 tickers = sp500_df['Ticker'].tolist()
@@ -72,7 +78,7 @@ with st.spinner("Fetching stock data (this may take a minute)..."):
 if not stock_df.empty:
     st.markdown("### 📈 Stock Summary Table")
     st.dataframe(
-        stock_df.sort_values(by="Target vs Current (%)", ascending=False).reset_index(drop=True),
+        stock_df.sort_values(by="Upside to Target", ascending=False).reset_index(drop=True),
         use_container_width=True
     )
 else:
