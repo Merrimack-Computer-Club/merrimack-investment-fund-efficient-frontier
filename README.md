@@ -29,7 +29,7 @@ pip install -r requirements.txt
 To start the Streamlit application, run the following command in your terminal:
 
 ```bash
-streamlit run streamlit_app.py
+streamlit run efficient_frontier.py
 ```
 
 This will start a local web server and open the app in your browser.
