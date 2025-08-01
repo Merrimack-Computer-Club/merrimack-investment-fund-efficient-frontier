@@ -51,7 +51,7 @@ def get_stock_data(tickers):
                 "YTD Change": ((current_price - price_ytd) / price_ytd) * 100,
                 "1Y Change": ((current_price - price_year_ago) / price_year_ago) * 100,
                 "Mean Analyst Target": mean_target,
-                "Upside to Target": ((mean_target - current_price) / current_price) * 100 if pd.notna(mean_target) else np.nan
+                "Upside to Target": ((mean_target - current_price) / current_price) * 100
             })
 
         except Exception as e:
