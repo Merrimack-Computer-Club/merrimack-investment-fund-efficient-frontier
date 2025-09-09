@@ -28,10 +28,11 @@ index_option = st.sidebar.selectbox(
 # --- Ticker Loaders ---
 @st.cache_data(show_spinner=False)
 def get_index_tickers(index_name):
+    headers = {'User-Agent': 'Mozilla/5.0 (compatible; MerrimackInvestmentFundBot/1.0; +https://github.com/your-repo)'}
     try:
         if index_name == "S&P 500 (USA)":
             url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
-            response = requests.get(url)
+            response = requests.get(url, headers=headers)
             soup = BeautifulSoup(response.text, 'html.parser')
             table = soup.find('table', {'id': 'constituents'})
             df = pd.read_html(StringIO(str(table)))[0]
@@ -39,22 +40,24 @@ def get_index_tickers(index_name):
 
         elif index_name == "FTSE 100 (UK)":
             url = "https://en.wikipedia.org/wiki/FTSE_100_Index"
-            response = requests.get(url)
+            response = requests.get(url, headers=headers)
             soup = BeautifulSoup(response.text, 'html.parser')
-            table = soup.find_all('table')[6]  # Fourth table is correct
+            table = soup.find_all('table')[6]
             df = pd.read_html(StringIO(str(table)))[0]
             df = df[['Company', 'Ticker']].rename(columns={'Company': 'Company', 'Ticker': 'Ticker'})
 
         elif index_name == "NASDAQ-100 (USA)":
             url = 'https://en.wikipedia.org/wiki/NASDAQ-100'
-            soup = BeautifulSoup(requests.get(url).text, 'html.parser')
+            response = requests.get(url, headers=headers)
+            soup = BeautifulSoup(response.text, 'html.parser')
             table = soup.find('table', {'id': 'constituents'})
             df = pd.read_html(StringIO(str(table)))[0]
             df = df[['Ticker', 'Company']]
 
         elif index_name == "Dow Jones (USA)":
             url = 'https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average'
-            soup = BeautifulSoup(requests.get(url).text, 'html.parser')
+            response = requests.get(url, headers=headers)
+            soup = BeautifulSoup(response.text, 'html.parser')
             table = soup.find('table', {'id': 'constituents'})
             df = pd.read_html(StringIO(str(table)))[0]
             df = df[['Symbol', 'Company']].rename(columns={'Symbol': 'Ticker'})
@@ -62,7 +65,8 @@ def get_index_tickers(index_name):
         elif index_name == "Nikkei 225 (Japan)":
             # Using list from TopForeignStocks.com with validated tickers :contentReference[oaicite:1]{index=1}
             url = "https://topforeignstocks.com/indices/the-components-of-the-nikkei-225-index/"
-            soup = BeautifulSoup(requests.get(url).text, 'html.parser')
+            response = requests.get(url, headers=headers)
+            soup = BeautifulSoup(response.text, 'html.parser')
             table = soup.find('table')
             df = pd.read_html(StringIO(str(table)))[0]
             df = df[['Code', 'Company']].rename(columns={'Code': 'Ticker'})
@@ -71,7 +75,8 @@ def get_index_tickers(index_name):
         elif index_name == "SSE Composite (China)":
             # Use table from Investing.com or TradingView for Shanghai Composite :contentReference[oaicite:2]{index=2}
             url = "https://www.investing.com/indices/shanghai-composite-components"
-            soup = BeautifulSoup(requests.get(url).text, 'html.parser')
+            response = requests.get(url, headers=headers)
+            soup = BeautifulSoup(response.text, 'html.parser')
             table = soup.find('table')
             df = pd.read_html(StringIO(str(table)))[0]
             df = df.rename(columns={'Name': 'Company'})
