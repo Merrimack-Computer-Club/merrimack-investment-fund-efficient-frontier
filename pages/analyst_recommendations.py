@@ -5,19 +5,94 @@ import numpy as np
 from bs4 import BeautifulSoup
 import requests
 from datetime import datetime, timedelta, timezone
+from io import StringIO
 
-st.set_page_config(page_title="S&P 500 Analyst Reversion Tool", layout="wide")
-st.title("📊 S&P 500 Analyst Mean Reversion Tool")
+# --- Page Config ---
+st.set_page_config(page_title="Global Analyst Reversion Tool", layout="wide")
 
+# --- Always-Visible Description ---
+st.title("🌐 Global Analyst Mean Reversion Tool")
+st.markdown("""
+Welcome to the **Global Analyst Reversion Tool**!  
+This app helps identify potential mean reversion opportunities by comparing a stock’s current price to the mean analyst target, along with recent performance data.
+
+👉 Select a market from the sidebar to get started.
+""")
+
+# --- Sidebar Selection ---
+index_option = st.sidebar.selectbox(
+    "Choose a Market Index",
+    options=["", "S&P 500 (USA)", "NASDAQ-100 (USA)", "Dow Jones (USA)", "FTSE 100 (UK)", "Nikkei 225 (Japan)", "SSE Composite (China)"]
+)
+
+# --- Ticker Loaders ---
 @st.cache_data(show_spinner=False)
-def get_sp500_tickers():
-    url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    table = soup.find('table', {'id': 'constituents'})
-    df = pd.read_html(str(table))[0]
-    return df[['Symbol', 'Security']].rename(columns={"Symbol": "Ticker", "Security": "Company"})
+def get_index_tickers(index_name):
+    headers = {'User-Agent': 'Mozilla/5.0 (compatible; MerrimackInvestmentFundBot/1.0; +https://github.com/your-repo)'}
+    try:
+        if index_name == "S&P 500 (USA)":
+            url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
+            response = requests.get(url, headers=headers)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            table = soup.find('table', {'id': 'constituents'})
+            df = pd.read_html(StringIO(str(table)))[0]
+            df = df[['Symbol', 'Security']].rename(columns={'Symbol': 'Ticker', 'Security': 'Company'})
 
+        elif index_name == "FTSE 100 (UK)":
+            url = "https://en.wikipedia.org/wiki/FTSE_100_Index"
+            response = requests.get(url, headers=headers)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            table = soup.find_all('table')[6]
+            df = pd.read_html(StringIO(str(table)))[0]
+            df = df[['Company', 'Ticker']].rename(columns={'Company': 'Company', 'Ticker': 'Ticker'})
+
+        elif index_name == "NASDAQ-100 (USA)":
+            url = 'https://en.wikipedia.org/wiki/NASDAQ-100'
+            response = requests.get(url, headers=headers)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            table = soup.find('table', {'id': 'constituents'})
+            df = pd.read_html(StringIO(str(table)))[0]
+            df = df[['Ticker', 'Company']]
+
+        elif index_name == "Dow Jones (USA)":
+            url = 'https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average'
+            response = requests.get(url, headers=headers)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            table = soup.find('table', {'id': 'constituents'})
+            df = pd.read_html(StringIO(str(table)))[0]
+            df = df[['Symbol', 'Company']].rename(columns={'Symbol': 'Ticker'})
+
+        elif index_name == "Nikkei 225 (Japan)":
+            # Using list from TopForeignStocks.com with validated tickers :contentReference[oaicite:1]{index=1}
+            url = "https://topforeignstocks.com/indices/the-components-of-the-nikkei-225-index/"
+            response = requests.get(url, headers=headers)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            table = soup.find('table')
+            df = pd.read_html(StringIO(str(table)))[0]
+            df = df[['Code', 'Company']].rename(columns={'Code': 'Ticker'})
+            df['Ticker'] = df['Ticker'].astype(str).str.zfill(4) + '.T'
+
+        elif index_name == "SSE Composite (China)":
+            # Use table from Investing.com or TradingView for Shanghai Composite :contentReference[oaicite:2]{index=2}
+            url = "https://www.investing.com/indices/shanghai-composite-components"
+            response = requests.get(url, headers=headers)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            table = soup.find('table')
+            df = pd.read_html(StringIO(str(table)))[0]
+            df = df.rename(columns={'Name': 'Company'})
+            df['Ticker'] = df['Name'].apply(lambda x: x.replace(' ', '')) + '.SS'
+            df = df[['Ticker', 'Company']]
+
+        else:
+            return pd.DataFrame()
+
+        return df[['Ticker', 'Company']]
+
+    except Exception as e:
+        st.error(f"❌ Failed to load {index_name} tickers: {e}")
+        return pd.DataFrame()
+
+# --- Stock Data Fetcher ---
 @st.cache_data(show_spinner=True)
 def get_stock_data(tickers):
     results = []
@@ -51,7 +126,7 @@ def get_stock_data(tickers):
                 "YTD Change": ((current_price - price_ytd) / price_ytd) * 100,
                 "1Y Change": ((current_price - price_year_ago) / price_year_ago) * 100,
                 "Mean Analyst Target": mean_target,
-                "Upside to Target": ((mean_target - current_price) / current_price) * 100 if pd.notna(mean_target) else np.nan
+                "Upside to Target": ((mean_target - current_price) / current_price) * 100
             })
 
         except Exception as e:
@@ -60,26 +135,21 @@ def get_stock_data(tickers):
 
     df = pd.DataFrame(results)
 
-    # Format numeric columns
-    for col in ["Current Price", "Last Close", "Mean Analyst Target"]:
-        df[col] = df[col].map(lambda x: f"${x:.2f}" if pd.notna(x) else "—")
-
-    for col in ["30D Change", "YTD Change", "1Y Change", "Upside to Target"]:
-        df[col] = df[col].map(lambda x: f"{x:+.2f}%" if pd.notna(x) else "—")
-
     return df
 
-sp500_df = get_sp500_tickers()
-tickers = sp500_df['Ticker'].tolist()
-
-with st.spinner("Fetching stock data (this may take a minute)..."):
-    stock_df = get_stock_data(tickers)
-
-if not stock_df.empty:
-    st.markdown("### 📈 Stock Summary Table")
-    st.dataframe(
-        stock_df.sort_values(by="Upside to Target", ascending=False).reset_index(drop=True),
-        use_container_width=True
-    )
-else:
-    st.error("No stock data could be retrieved.")
+# --- Load and Display Table ---
+if index_option:
+    with st.spinner(f"Loading {index_option} data..."):
+        index_df = get_index_tickers(index_option)
+        if not index_df.empty:
+            stock_df = get_stock_data(index_df['Ticker'].tolist())
+            if not stock_df.empty:
+                st.markdown(f"### 📈 {index_option} Stock Summary")
+                st.dataframe(
+                    stock_df.sort_values(by="Upside to Target", ascending=False).reset_index(drop=True),
+                    use_container_width=True
+                )
+            else:
+                st.warning("No valid stock data retrieved.")
+        else:
+            st.warning("No tickers found for selected index.")

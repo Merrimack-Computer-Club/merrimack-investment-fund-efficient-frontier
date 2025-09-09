@@ -12,6 +12,7 @@ et_xmlfile==2.0.0
 frozendict==2.4.6
 gitdb==4.0.12
 GitPython==3.1.41
+html5lib==1.1
 idna==3.10
 Jinja2==3.1.6
 jsonschema==4.25.0
@@ -53,5 +54,6 @@ typing_extensions==4.14.1
 tzdata==2025.2
 urllib3==2.5.0
 watchdog==5.0.3
+webencodings==0.5.1
 websockets==15.0.1
 yfinance==0.2.65
