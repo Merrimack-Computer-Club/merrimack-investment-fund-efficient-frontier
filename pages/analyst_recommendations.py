@@ -22,7 +22,7 @@ This app helps identify potential mean reversion opportunities by comparing a st
 # --- Sidebar Selection ---
 index_option = st.sidebar.selectbox(
     "Choose a Market Index",
-    options=["", "S&P 500 (USA)", "NASDAQ-100 (USA)", "Dow Jones (USA)", "FTSE 100 (UK)", "Nikkei 225 (Japan)", "SSE Composite (China)"]
+    options=["", "S&P 500 (USA)", "NASDAQ-100 (USA)", "Russell 1000", "Dow Jones (USA)", "FTSE 100 (UK)", "Nikkei 225 (Japan)", "SSE Composite (China)"]
 )
 
 # --- Ticker Loaders ---
@@ -45,6 +45,14 @@ def get_index_tickers(index_name):
             table = soup.find_all('table')[6]
             df = pd.read_html(StringIO(str(table)))[0]
             df = df[['Company', 'Ticker']].rename(columns={'Company': 'Company', 'Ticker': 'Ticker'})
+
+        elif index_name == "Russell 1000":
+            url = "https://en.wikipedia.org/wiki/Russell_1000_Index"
+            response = requests.get(url, headers=headers)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            table = soup.find('table', {'id': 'constituents'})
+            df = pd.read_html(StringIO(str(table)))[0]
+            df = df[['Company', 'Symbol']].rename(columns={'Symbol': 'Ticker', 'Company': 'Company'})
 
         elif index_name == "NASDAQ-100 (USA)":
             url = 'https://en.wikipedia.org/wiki/NASDAQ-100'
