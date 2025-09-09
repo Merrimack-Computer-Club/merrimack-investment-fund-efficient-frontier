@@ -46,6 +46,14 @@ def get_index_tickers(index_name):
             df = pd.read_html(StringIO(str(table)))[0]
             df = df[['Company', 'Ticker']].rename(columns={'Company': 'Company', 'Ticker': 'Ticker'})
 
+        elif index_name == "Russell 1000":
+            url = "https://en.wikipedia.org/wiki/Russell_1000_Index"
+            response = requests.get(url, headers=headers)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            table = soup.find('table', {'id': 'constituents'})
+            df = pd.read_html(StringIO(str(table)))[0]
+            df = df[['Company', 'Ticker']].rename(columns={'Company': 'Company', 'Ticker': 'Ticker'})
+
         elif index_name == "NASDAQ-100 (USA)":
             url = 'https://en.wikipedia.org/wiki/NASDAQ-100'
             response = requests.get(url, headers=headers)
