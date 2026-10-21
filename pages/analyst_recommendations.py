@@ -1,163 +1,97 @@
 import streamlit as st
-import yfinance as yf
-import pandas as pd
-import numpy as np
-from bs4 import BeautifulSoup
-import requests
-from datetime import datetime, timedelta, timezone
-from io import StringIO
+from yfinance.exceptions import YFRateLimitError
 
-# --- Page Config ---
+from analyst_data import (
+    INDEX_SOURCES,
+    IndexDataError,
+    get_index_tickers,
+    get_stock_data,
+)
+
+
 st.set_page_config(page_title="Global Analyst Reversion Tool", layout="wide")
-
-# --- Always-Visible Description ---
 st.title("🌐 Global Analyst Mean Reversion Tool")
 st.markdown("""
-Welcome to the **Global Analyst Reversion Tool**!  
-This app helps identify potential mean reversion opportunities by comparing a stock’s current price to the mean analyst target, along with recent performance data.
+Welcome to the **Global Analyst Reversion Tool**!
+This app compares each stock in a market index with its mean analyst price target.
+An index itself does not have a company analyst target, and some stocks have no
+analyst coverage.
 
 👉 Select a market from the sidebar to get started.
 """)
 
-# --- Sidebar Selection ---
 index_option = st.sidebar.selectbox(
-    "Choose a Market Index",
-    options=["", "S&P 500 (USA)", "NASDAQ-100 (USA)", "Russell 1000", "Dow Jones (USA)", "FTSE 100 (UK)", "Nikkei 225 (Japan)", "SSE Composite (China)"]
+    "Choose a Market Index", options=["", *INDEX_SOURCES]
 )
 
-# --- Ticker Loaders ---
-@st.cache_data(show_spinner=False)
-def get_index_tickers(index_name):
-    headers = {'User-Agent': 'Mozilla/5.0 (compatible; MerrimackInvestmentFundBot/1.0; +https://github.com/your-repo)'}
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def load_constituents(index_name):
+    return get_index_tickers(index_name)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_stock_data(constituents):
+    progress = st.progress(0, text="Loading stock prices and analyst targets...")
     try:
-        if index_name == "S&P 500 (USA)":
-            url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
-            response = requests.get(url, headers=headers)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            table = soup.find('table', {'id': 'constituents'})
-            df = pd.read_html(StringIO(str(table)))[0]
-            df = df[['Symbol', 'Security']].rename(columns={'Symbol': 'Ticker', 'Security': 'Company'})
+        return get_stock_data(
+            constituents,
+            progress=lambda done, total: progress.progress(
+                done / total, text=f"Loaded {done} of {total} stocks..."
+            ),
+        )
+    finally:
+        progress.empty()
 
-        elif index_name == "FTSE 100 (UK)":
-            url = "https://en.wikipedia.org/wiki/FTSE_100_Index"
-            response = requests.get(url, headers=headers)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            table = soup.find_all('table')[6]
-            df = pd.read_html(StringIO(str(table)))[0]
-            df = df[['Company', 'Ticker']].rename(columns={'Company': 'Company', 'Ticker': 'Ticker'})
 
-        elif index_name == "Russell 1000":
-            url = "https://en.wikipedia.org/wiki/Russell_1000_Index"
-            response = requests.get(url, headers=headers)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            table = soup.find('table', {'id': 'constituents'})
-            df = pd.read_html(StringIO(str(table)))[0]
-            df = df[['Company', 'Symbol']].rename(columns={'Symbol': 'Ticker', 'Company': 'Company'})
-
-        elif index_name == "NASDAQ-100 (USA)":
-            url = 'https://en.wikipedia.org/wiki/NASDAQ-100'
-            response = requests.get(url, headers=headers)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            table = soup.find('table', {'id': 'constituents'})
-            df = pd.read_html(StringIO(str(table)))[0]
-            df = df[['Ticker', 'Company']]
-
-        elif index_name == "Dow Jones (USA)":
-            url = 'https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average'
-            response = requests.get(url, headers=headers)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            table = soup.find('table', {'id': 'constituents'})
-            df = pd.read_html(StringIO(str(table)))[0]
-            df = df[['Symbol', 'Company']].rename(columns={'Symbol': 'Ticker'})
-
-        elif index_name == "Nikkei 225 (Japan)":
-            # Using list from TopForeignStocks.com with validated tickers :contentReference[oaicite:1]{index=1}
-            url = "https://topforeignstocks.com/indices/the-components-of-the-nikkei-225-index/"
-            response = requests.get(url, headers=headers)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            table = soup.find('table')
-            df = pd.read_html(StringIO(str(table)))[0]
-            df = df[['Code', 'Company']].rename(columns={'Code': 'Ticker'})
-            df['Ticker'] = df['Ticker'].astype(str).str.zfill(4) + '.T'
-
-        elif index_name == "SSE Composite (China)":
-            # Use table from Investing.com or TradingView for Shanghai Composite :contentReference[oaicite:2]{index=2}
-            url = "https://www.investing.com/indices/shanghai-composite-components"
-            response = requests.get(url, headers=headers)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            table = soup.find('table')
-            df = pd.read_html(StringIO(str(table)))[0]
-            df = df.rename(columns={'Name': 'Company'})
-            df['Ticker'] = df['Name'].apply(lambda x: x.replace(' ', '')) + '.SS'
-            df = df[['Ticker', 'Company']]
-
-        else:
-            return pd.DataFrame()
-
-        return df[['Ticker', 'Company']]
-
-    except Exception as e:
-        st.error(f"❌ Failed to load {index_name} tickers: {e}")
-        return pd.DataFrame()
-
-# --- Stock Data Fetcher ---
-@st.cache_data(show_spinner=True)
-def get_stock_data(tickers):
-    results = []
-    end_date = datetime.now(timezone.utc)
-    thirty_days_ago = end_date - timedelta(days=30)
-    ytd_start = datetime(end_date.year, 1, 1, tzinfo=timezone.utc)
-
-    for ticker in tickers:
-        try:
-            stock = yf.Ticker(ticker)
-            hist = stock.history(period="1y")
-
-            if hist.empty or len(hist) < 2:
-                continue
-
-            current_price = hist['Close'].iloc[-1]
-            last_close = hist['Close'].iloc[-2]
-
-            price_30d_ago = hist[hist.index >= thirty_days_ago]['Close'].iloc[0]
-            price_ytd = hist[hist.index >= ytd_start]['Close'].iloc[0]
-            price_year_ago = hist['Close'].iloc[0]
-
-            mean_target = stock.info.get('targetMeanPrice', np.nan)
-
-            results.append({
-                "Ticker": ticker,
-                "Company": stock.info.get("shortName", ""),
-                "Current Price": current_price,
-                "Last Close": last_close,
-                "30D Change": ((current_price - price_30d_ago) / price_30d_ago) * 100,
-                "YTD Change": ((current_price - price_ytd) / price_ytd) * 100,
-                "1Y Change": ((current_price - price_year_ago) / price_year_ago) * 100,
-                "Mean Analyst Target": mean_target,
-                "Upside to Target": ((mean_target - current_price) / current_price) * 100
-            })
-
-        except Exception as e:
-            print(f"Error for {ticker}: {e}")
-            continue
-
-    df = pd.DataFrame(results)
-
-    return df
-
-# --- Load and Display Table ---
 if index_option:
-    with st.spinner(f"Loading {index_option} data..."):
-        index_df = get_index_tickers(index_option)
-        if not index_df.empty:
-            stock_df = get_stock_data(index_df['Ticker'].tolist())
-            if not stock_df.empty:
-                st.markdown(f"### 📈 {index_option} Stock Summary")
-                st.dataframe(
-                    stock_df.sort_values(by="Upside to Target", ascending=False).reset_index(drop=True),
-                    use_container_width=True
-                )
-            else:
-                st.warning("No valid stock data retrieved.")
+    if st.sidebar.button("Refresh data"):
+        load_constituents.clear()
+        load_stock_data.clear()
+
+    st.caption(f"Constituent source: {INDEX_SOURCES[index_option]}")
+    if index_option == "Nikkei 225 (Japan)":
+        st.caption(
+            "The Nikkei constituent source is dated January 2024; "
+            "it may not reflect later index changes."
+        )
+    try:
+        with st.spinner(f"Loading {index_option} data. Large indexes can take several minutes..."):
+            index_df = load_constituents(index_option)
+            stock_df, issues = load_stock_data(index_df)
+    except IndexDataError as error:
+        st.error(str(error))
+        st.info("The constituent provider may be unavailable. Use Refresh data to retry.")
+    except YFRateLimitError:
+        st.error("Yahoo Finance is limiting requests. Wait a few minutes, then refresh the data.")
+    else:
+        if not issues.empty:
+            st.warning(
+                f"Data requests failed for {issues['Ticker'].nunique()} stocks. "
+                "Available prices are retained when only the analyst target fails."
+            )
+            with st.expander("Data request details"):
+                st.dataframe(issues, use_container_width=True, hide_index=True)
+        if stock_df.empty:
+            st.warning("No valid stock prices were retrieved. Try refreshing the data later.")
         else:
-            st.warning("No tickers found for selected index.")
+            covered = int(stock_df["Mean Analyst Target"].notna().sum())
+            st.markdown(f"### 📈 {index_option} Stock Summary")
+            st.caption(
+                f"Prices loaded for {len(stock_df)} of {len(index_df)} constituents; "
+                f"analyst targets available for {covered}. "
+                "Prices and targets use each stock's quoted currency/unit, not a common currency. "
+                "Current Price is the latest closing price. Changes exclude dividends. "
+                "Blank values mean the required history or analyst target is unavailable."
+            )
+            if covered == 0:
+                st.info("Yahoo Finance returned no analyst targets for these stocks.")
+            st.dataframe(
+                stock_df.sort_values(
+                    by=["Upside to Target", "Ticker"],
+                    ascending=[False, True],
+                    na_position="last",
+                ).reset_index(drop=True),
+                use_container_width=True,
+                hide_index=True,
+            )

@@ -50,6 +50,39 @@ Here’s a quick example of how to use the app:
 - Set the portfolio weights using the sliders (e.g., 40% AAPL, 30% MSFT, 30% TSLA).
 - Click "Update Portfolio" to visualize the portfolio’s performance against the Efficient Frontier.
 
+## Analyst Recommendations
+
+Open **analyst recommendations** in the sidebar and select a market index.
+The page compares the individual companies in that index, not the index itself,
+with their mean analyst price targets from Yahoo Finance.
+
+- Supported lists: S&P 500, NASDAQ-100, Russell 1000, Dow Jones, FTSE 100,
+  Nikkei 225, and SSE Composite. US/UK constituents come from Wikipedia, Nikkei
+  constituents from TopForeignStocks, and SSE constituents from China Securities
+  Index's downloadable list. The Nikkei source is dated January 2024 and may
+  not reflect subsequent index changes; source links are shown on the page.
+- Symbols are converted to Yahoo Finance format, including US share classes
+  (`BRK.B` becomes `BRK-B`), London (`.L`), Tokyo (`.T`), and Shanghai (`.SS`).
+- **Current Price** is the latest closing price, not a live quote. Price changes
+  exclude dividends and use the last available close on or before the comparison
+  date. YTD starts with the previous year's final close.
+- Missing analyst coverage or insufficient history appears as a blank value,
+  not a zero or an invented recommendation. Prices remain visible when a target
+  request fails, and request failures are shown separately.
+- Prices and targets are in each stock's quoted currency/unit (for example,
+  London prices may be quoted in pence). They are not converted to a common currency.
+- Constituents are cached for one day and stock data for one hour. **Refresh data**
+  clears these caches. Large indexes can take several minutes; progress is shown.
+  If Yahoo Finance limits requests, wait before retrying.
+
+### Regression tests
+
+Run the offline tests after installing `requirements.txt`:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
 ## Screenshots
 
 ![App Screenshot](assets/merrimack-smf-application-screenshot.png)  <!-- Add a screenshot of your app here -->
