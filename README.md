@@ -38,9 +38,9 @@ This will start a local web server and open the app in your browser.
 
 1. **Enter Tickers**: Input a list of stock tickers (comma-separated) into the text box. For example: `AAPL, MSFT, TSLA`.
 2. **Set Date Range**: Specify the start and end dates for historical data fetching.
-3. **Adjust Weights**: Use the sliders to assign weights to each stock in your portfolio. The total weight will be automatically normalized to sum to 1.
-4. **Update Portfolio**: Click the "Update Portfolio" button to calculate the Efficient Frontier and see how your custom portfolio compares.
-5. **View Results**: The plot will display the Efficient Frontier and highlight your custom portfolio with its corresponding risk and return.
+3. **Adjust Weights**: Use sliders or number inputs to assign non-negative weights. At least one weight must be positive. The app normalizes the proportions to sum to 1 and keeps each weight attached to its ticker when you reorder the list.
+4. **Deploy Efficient Frontier**: Click "Deploy Efficient Frontier" to solve the portfolio allocations and compare your portfolio.
+5. **View Results**: The plot shows an optimized frontier line, separately labeled random allocation samples, and your custom portfolio. Changing the number of random samples does not change the optimized allocations.
 
 ## Example
 
@@ -48,7 +48,86 @@ Here’s a quick example of how to use the app:
 
 - Input the tickers `AAPL, MSFT, TSLA` in the ticker field.
 - Set the portfolio weights using the sliders (e.g., 40% AAPL, 30% MSFT, 30% TSLA).
-- Click "Update Portfolio" to visualize the portfolio’s performance against the Efficient Frontier.
+- Click "Deploy Efficient Frontier" to visualize the portfolio’s performance against the Efficient Frontier.
+
+## How the Portfolio Calculations Work
+
+- **A real efficient frontier, not a random cloud.** The app uses SciPy's constrained
+  optimizer to find the lowest variance for each target return. The curve starts
+  at the global minimum-variance portfolio and ends at the highest feasible return.
+  Weights cannot be negative and must sum to 100%. Maximum Sharpe ratio is solved
+  separately, rather than choosing the luckiest random sample. Solver failures
+  and infeasible results are reported instead of used as allocations.
+- **Return and risk use the same units.** Daily simple returns come from adjusted
+  closing prices. Expected annual return is the weighted daily average times 252.
+  Annual variance is `252 * weights.T @ daily_covariance @ weights`; volatility
+  is its square root. These are historical, arithmetic estimates, not compound
+  growth rates or predictions. Sharpe ratio is `(annual_return - annual_risk_free_rate)
+  / annual_volatility`. It is undefined at effectively zero volatility; the app
+  does not invent a finite maximum-Sharpe allocation in that case.
+- **Inputs are checked before use.** Empty/duplicate tickers, invalid dates,
+  negative/non-finite weights, and all-zero allocations are rejected. Yahoo's
+  response columns are matched by ticker, not by their position in a download.
+  The annual risk-free input is a decimal: `0.04` means 4%. The latest 10-year
+  Treasury yield is only a proxy; if it cannot be loaded, enter a rate manually.
+- **Missing prices are not invented.** Start Date is inclusive and End Date is
+  exclusive. Estimates use the shared available history for all selected assets,
+  with the effective dates shown on the page. At least three closing prices
+  (two daily returns) are required. Missing prices inside that window cause an
+  error instead of being forward-filled into fake zero returns. A benchmark
+  comparison also requires matching closing dates, so a multi-day market return
+  is not compared with a one-day portfolio return.
+- **Historical comparisons rebalance daily.** Both the selected and optimized
+  portfolios return to their fixed weights each trading day. This is not a
+  buy-and-hold simulation. The daily-return chart is labeled as daily; the
+  cumulative chart compounds returns as `(1 + daily_returns).cumprod() - 1`
+  and includes a common zero-return starting point.
+- **Alpha and beta use daily excess returns.** The annual risk-free rate is
+  divided by 252. Beta is the slope against the benchmark using the same dates;
+  alpha is the daily excess-return intercept multiplied by 252. Alpha is not
+  calculated by adding up a varying number of daily returns and subtracting an
+  annual rate. Both values are undefined if the benchmark has no variation.
+
+### Limitations
+
+The optimized historical comparison is **in-sample (hindsight)**: its weights
+were fitted using the estimation history, not a separate training period.
+It is not evidence of future performance. Short histories, redundant assets,
+and noisy historical means can produce unstable allocations or near-zero
+estimated risk. All-below-risk-free estimates are called out because maximizing
+a negative Sharpe ratio can favor higher risk.
+
+The model assumes 252 trading days per year, a constant annual risk-free input,
+daily rebalancing, no short selling or leverage, and no transaction costs or
+taxes. Annualized volatility uses the usual uncorrelated-daily-return assumption.
+It does not convert currencies. Stocks use dividend/split-adjusted
+closes, while the selected market indexes are **price indexes**, not comparable
+dividend-reinvested total-return indexes. The page explicitly notes this
+benchmark limitation. Yahoo data and company names are cached for one hour;
+request failures are shown, not cached as successful data.
+
+### Portfolio CSV Format
+
+Uploads use one row of tickers and an optional second row of weights:
+
+```csv
+MSFT,AAPL
+0.6,0.4
+```
+
+One-row uploads receive equal weights. Positive totals other than 1 are
+normalized; invalid or incomplete rows are rejected. Selected and optimized
+portfolio downloads use this same format. The separate sub-portfolio download
+is a reporting table in percentage units: its weights sum to the chosen share
+of a larger portfolio, whose remaining assets are not modeled. It is not an
+upload-format portfolio.
+
+### Calculation References
+
+- [Stanford/CVX portfolio optimization notes](https://www.cvxgrp.org/cvx_short_course/docs/applications/notebooks/portfolio_optimization.html): weighted return, covariance risk, and constrained optimal trade-offs. This app uses SciPy, not CVXPY.
+- [William Sharpe, The Sharpe Ratio](https://web.stanford.edu/~wfsharpe/art/sr/SR.htm): excess returns and consistent time periods.
+- [pandas 2.2 `pct_change`](https://pandas.pydata.org/pandas-docs/version/2.2/reference/api/pandas.DataFrame.pct_change.html): fractional returns and explicit `fill_method=None`.
+- [SciPy SLSQP](https://docs.scipy.org/doc/scipy-1.14.1/reference/optimize.minimize-slsqp.html): constrained numerical optimization.
 
 ## Analyst Recommendations
 
@@ -75,9 +154,11 @@ with their mean analyst price targets from Yahoo Finance.
   clears these caches. Large indexes can take several minutes; progress is shown.
   If Yahoo Finance limits requests, wait before retrying.
 
-### Regression tests
+## Regression tests
 
-Run the offline tests after installing `requirements.txt`:
+Run the offline numerical, CSV/data-validation, and Streamlit interaction tests
+after installing `requirements.txt`. They also cover the analyst page without
+making network requests:
 
 ```bash
 python -m unittest discover -s tests -v
