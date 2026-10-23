@@ -1,576 +1,403 @@
+from io import BytesIO
+
 import numpy as np
 import pandas as pd
-import yfinance as yf
 import plotly.graph_objs as go
 import streamlit as st
-import io
 
-# Author tag
+import portfolio_analysis as pa
+
+
 AUTHOR_URL = "https://www.linkedin.com/in/alex-elguezabal/"
 WEBSITE_URL = "https://merrimackcomputer.club/"
 
-# Set the page configuration and layout as wide.
-st.set_page_config(page_title="Merrimack Computer Club Portfolio Analysis Tool", layout="wide", page_icon="assets/merrimack-computer-club.png")
+st.set_page_config(
+    page_title="Merrimack Computer Club Portfolio Analysis Tool",
+    layout="wide", page_icon="assets/merrimack-computer-club.png",
+)
 
-# Page Information Ref.
 mcc_image = f"""
 <a href="{WEBSITE_URL}" target="_blank">
     <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSixZF48ZnadAhRjcI-4_g8pCN4nDtLYabSNg&s" alt="Merrimack Computer Club Website" style="width:100; text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);">
 </a>
 """
-
-# Render the clickable image
 st.markdown(mcc_image, unsafe_allow_html=True)
-
-# Use Markdown to create custom header with image on the right
 st.title("Merrimack College Student Managed Fund - Portfolio Analysis Tool")
-
-# Add logo
-mk = '''
-This tool helps users visualize and optimize investment portfolios using the **efficient frontier**. It calculates the optimal portfolio allocation for various assets and plots the trade-off between risk and return.
+st.markdown("""
+This tool helps users visualize and optimize investment portfolios using the
+**efficient frontier**: the lowest-risk portfolios for a range of estimated returns.
 
 ## Key Features
 
-- **Efficient Frontier**: Identify optimal portfolios for the best risk-return balance.
-- **Monte Carlo Simulation**: Enhance diversification with robust outcome projections.
-- **Portfolio Customization**: Adjust allocations, set constraints, and analyze key metrics like return, volatility, and Sharpe ratio.
-- **Market Comparison**: Benchmark performance against indices such as S&P 500 and NASDAQ.
-- **Backtesting**: Review historical performance for selected and optimized portfolios.
-- **Alpha & Beta Analysis**: Evaluate excess returns and market risk using CAPM metrics.
-- **Interactive Tools**: Seamlessly upload/download CSVs, fine-tune weights, and integrate dynamic risk-free rates.
-- **Visualization**: Explore interactive charts for efficient frontiers, asset correlations, and cumulative returns.
-- **Error Handling**: Ensure smooth operations with clear feedback and issue resolution.
+- **Efficient Frontier**: Optimize fully invested, long-only allocations.
+- **Random Portfolio Samples**: Compare possible allocations, not forecasts of future prices.
+- **Portfolio Customization**: Adjust weights and compare annual return, volatility, and Sharpe ratio.
+- **Market Comparison**: Compare historical daily and cumulative returns with a market index.
+- **Alpha & Beta Analysis**: Compare annualized excess return and sensitivity to the market.
+- **Interactive Tools**: Upload/download portfolio CSVs and set an annual risk-free rate.
+- **Visualization**: Explore the frontier, asset correlations, and historical mean returns.
 
-This tool empowers users to optimize portfolios, manage risk, and make informed decisions about asset allocation and performance.
-'''
-st.markdown(mk)
+Estimates describe the selected historical sample; they do not guarantee future performance.
+""")
 
-# Dropdown to select the market index for comparison
 market_options = {
-    "S&P 500": "^GSPC",
-    "DJIA": "^DJI",
-    "Russell 1000": "^RUI",
-    "NASDAQ": "^IXIC"
+    "S&P 500": "^GSPC", "DJIA": "^DJI",
+    "Russell 1000": "^RUI", "NASDAQ": "^IXIC",
 }
 
-# Step 1: Fetch historical stock prices with error handling
-def get_data(tickers, start_date, end_date):
-    try:
-        data = yf.download(tickers, start=start_date, end=end_date, auto_adjust=True)['Close']
-        returns = data.pct_change().dropna()
-        return returns
-    except Exception as e:
-        st.error(f"Error fetching data: {str(e)}")
-        return None
 
-# Step 2: Portfolio performance calculations with adjustable risk-free rate
-def portfolio_performance(weights, mean_returns, cov_matrix, risk_free_rate):
-    # Annualize returns and volatility
-    annualized_return = np.sum(mean_returns * weights) * 252  # Annualizing daily returns
-    annualized_std_dev = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights))) * np.sqrt(252)  # Annualizing volatility
-    sharpe_ratio = (annualized_return - risk_free_rate) / annualized_std_dev
-    return annualized_return, annualized_std_dev, sharpe_ratio
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_prices(tickers, start_date, end_date):
+    return pa.download_prices(tickers, start_date, end_date)
 
-# Step 3: Compute Efficient Frontier
-def efficient_frontier(mean_returns, cov_matrix, num_portfolios=100, risk_free_rate=0.01):
-    num_assets = len(mean_returns)
-    results = np.zeros((3, num_portfolios))
-    weights_record = []
 
-    for i in range(num_portfolios):
-        weights = np.random.random(num_assets)
-        weights /= np.sum(weights)
-        returns, std_dev, sharpe_ratio = portfolio_performance(weights, mean_returns, cov_matrix, risk_free_rate)
-        results[0, i] = std_dev
-        results[1, i] = returns
-        results[2, i] = sharpe_ratio  # Sharpe Ratio
-        weights_record.append(weights)
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_risk_free_rate():
+    return pa.get_risk_free_rate()
 
-    return results, weights_record
 
-# Step 4: Plot Efficient Frontier and Custom Portfolio
-def plot_efficient_frontier(results, weights_record, custom_weights, custom_return, custom_std_dev, tickers):
-    hover_texts = []
-    for i, weights in enumerate(weights_record):
-        portfolio_info = [f"{ticker}: {weight:.2%}" for ticker, weight in zip(tickers, weights)]
-        hover_text = (
-            f"Portfolio Weights:<br>{'<br>'.join(portfolio_info)}<br>"
-            f"Return: {results[1, i]:.2%}<br>"
-            f"Volatility: {results[0, i]:.2%}<br>"
-            f"Sharpe Ratio: {results[2, i]:.2f}"
-        )
-        hover_texts.append(hover_text)
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_asset_name(ticker):
+    return pa.get_asset_name(ticker)
 
-    trace1 = go.Scatter(
-        x=results[0, :], y=results[1, :],
-        mode='markers',
-        marker=dict(color=results[2, :], size=5, showscale=True),
-        name='Efficient Frontier',
-        text=hover_texts,
-        hoverinfo='text'
+
+def sharpe_text(value):
+    return f"{value:.3f}" if value is not None else "Undefined (zero volatility)"
+
+
+def weights_text(weights, separator=", "):
+    return separator.join(f"{ticker}: {weight:.2%}" for ticker, weight in weights.items())
+
+
+def portfolio_hover(portfolio):
+    return (
+        f"{weights_text(portfolio.weights, '<br>')}<br>"
+        f"Annual Return: {portfolio.annual_return:.2%}<br>"
+        f"Annual Volatility: {portfolio.volatility:.2%}<br>"
+        f"Sharpe Ratio: {sharpe_text(portfolio.sharpe)}"
     )
 
-    custom_portfolio_info = [f"{ticker}: {weight:.2%}" for ticker, weight in zip(tickers, custom_weights)]
-    custom_hover_text = (
-        f"Custom Portfolio:<br>{'<br>'.join(custom_portfolio_info)}<br>"
-        f"Return: {custom_return:.2%}<br>"
-        f"Volatility: {custom_std_dev:.2%}<br>"
-        f"Sharpe Ratio: {(custom_return - risk_free_rate) / custom_std_dev:.2f}"
-    )
 
-    trace2 = go.Scatter(
-        x=[custom_std_dev], y=[custom_return],
-        mode='markers',
-        marker=dict(color='red', size=12, symbol='star'),
-        name='Custom Portfolio',
-        text=[custom_hover_text],
-        hoverinfo='text'
-    )
+def portfolio_table(portfolios, names=None):
+    frame = pd.DataFrame([{
+        "Expected Annual Return": portfolio.annual_return,
+        "Expected Volatility": portfolio.volatility,
+        "Sharpe Ratio": portfolio.sharpe,
+        "Weights": weights_text(portfolio.weights),
+    } for portfolio in portfolios])
+    if names is not None:
+        frame.insert(0, "Portfolio", names)
+    return frame
 
-    layout = go.Layout(
-        title='Efficient Frontier with Custom Portfolio',
-        xaxis=dict(title='Volatility (Std Dev)'),
-        yaxis=dict(title='Return'),
-        showlegend=True
-    )
 
-    fig = go.Figure(data=[trace1, trace2], layout=layout)
+def styled_metrics(frame):
+    return frame.style.format({
+        "Expected Annual Return": "{:.2%}",
+        "Expected Volatility": "{:.2%}",
+        "Sharpe Ratio": "{:.4f}",
+    }, na_rep="Undefined")
+
+
+def plot_efficient_frontier(optimization, samples, custom):
+    colors = [portfolio.sharpe if portfolio.sharpe is not None else np.nan for portfolio in samples]
+    has_sharpe = any(portfolio.sharpe is not None for portfolio in samples)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=[portfolio.volatility for portfolio in samples],
+        y=[portfolio.annual_return for portfolio in samples],
+        mode="markers", name="Random portfolios (not optimized)",
+        marker=dict(
+            color=colors if has_sharpe else "lightgray",
+            size=5, showscale=has_sharpe, colorbar=dict(title="Sharpe"),
+        ),
+        text=[portfolio_hover(portfolio) for portfolio in samples], hoverinfo="text",
+    ))
+    fig.add_trace(go.Scatter(
+        x=[portfolio.volatility for portfolio in optimization.frontier],
+        y=[portfolio.annual_return for portfolio in optimization.frontier],
+        mode="lines+markers", name="Efficient frontier",
+        line=dict(color="darkblue", width=3),
+        text=[portfolio_hover(portfolio) for portfolio in optimization.frontier],
+        hoverinfo="text",
+    ))
+    highlights = [("Custom Portfolio", custom, "red", "star")]
+    if optimization.maximum_sharpe is not None:
+        highlights.append(("Maximum Sharpe Portfolio", optimization.maximum_sharpe, "green", "diamond"))
+    for name, portfolio, color, symbol in highlights:
+        fig.add_trace(go.Scatter(
+            x=[portfolio.volatility], y=[portfolio.annual_return], name=name,
+            mode="markers", marker=dict(color=color, size=12, symbol=symbol),
+            text=[portfolio_hover(portfolio)], hoverinfo="text",
+        ))
+    fig.update_layout(
+        title="Efficient Frontier with Custom Portfolio",
+        xaxis=dict(title="Annual Volatility (Std Dev)", tickformat=".0%"),
+        yaxis=dict(title="Expected Annual Return", tickformat=".0%"),
+        showlegend=True,
+    )
     return fig
 
-# Step 5: Portfolio Summary Table
-def portfolio_summary_table(results, weights_record, tickers):
-    max_sharpe_idx = np.argmax(results[2])
-    min_var_idx = np.argmin(results[0])
 
-    summary_data = {
-        'Portfolio': ['Maximum Sharpe Ratio (Optimized Portfolio)', 'Minimum Variance'],
-        'Expected Annual Return': [results[1, max_sharpe_idx], results[1, min_var_idx]],
-        'Expected Volatility': [results[0, max_sharpe_idx], results[0, min_var_idx]],
-        'Sharpe Ratio': [results[2, max_sharpe_idx], results[2, min_var_idx]],
-        'Weights': [weights_record[max_sharpe_idx], weights_record[min_var_idx]]
-    }
-    summary_df = pd.DataFrame(summary_data)
-
-    summary_df['Weights'] = summary_df['Weights'].apply(lambda w: ', '.join([f"{tickers[i]}: {w[i]:.2%}" for i in range(len(w))]))
-
-    st.subheader("Portfolio Summary: Efficient Frontier")
-
-    #####################################################
-    #
-    #   Sharpe Ratio Dataframe
-    #
-    #####################################################
-
-    # Create a DataFrame to store portfolio statistics
-    summary_sharpe_df = pd.DataFrame({
-        'Expected Annual Return': results[1],
-        'Expected Volatility': results[0],
-        'Sharpe Ratio': results[2],
-        'Weights': weights_record
-    })
-
-    # Sort by Sharpe Ratio in descending order
-    summary_sharpe_df = summary_sharpe_df.sort_values(by='Sharpe Ratio', ascending=False).reset_index(drop=True)
-
-    # Convert weights to readable format
-    summary_sharpe_df['Weights'] = summary_sharpe_df['Weights'].apply(
-        lambda w: ', '.join([f"{tickers[i]}: {w[i]:.2%}" for i in range(len(w))])
-    )
-
-    summary, sharp_ratio = st.tabs(["🗃 Summary", "📈 Sharp Ratio Data"])
-    
-    summary.subheader("Summary of Efficient Frontier")
-    summary.write(summary_df)    
-    sharp_ratio.subheader("Portfolios sorted by Sharpe Ratio")
-    sharp_ratio.dataframe(summary_sharpe_df.style.format({"Expected Annual Return": "{:.2%}", 
-                                          "Expected Volatility": "{:.2%}", 
-                                          "Sharpe Ratio": "{:.4f}"}))
-
-# Step 6: Correlation Matrix Display
-def display_correlation_matrix(returns, tickers):
-    correlation_matrix = returns.corr()
-    st.write(correlation_matrix)
-
-# Step 7: Portfolio & Optimized Portfolio Backtest
-def portfolio_backtest(results, weights_record, selected_weights, tickers, start_date, end_date):
-    max_sharpe_idx = np.argmax(results[2])
-    # Fetch historical data for the selected portfolio
-    selected_portfolio_returns = get_data(tickers, start_date, end_date)
-    weighted_portfolio_returns = (selected_portfolio_returns * selected_weights).sum(axis=1)
-    optimized_portfolio_weights = weights_record[max_sharpe_idx]
-    weighted_optimized_portfolio_returns = (selected_portfolio_returns * optimized_portfolio_weights).sum(axis=1)
-
-    # Convert portfolio returns index to timezone-naive
-    weighted_portfolio_returns.index = weighted_portfolio_returns.index.tz_localize(None)
-    weighted_optimized_portfolio_returns.index = weighted_optimized_portfolio_returns.index.tz_localize(None)
-
-    # Fetch historical data for the selected market index
-    market_symbol = market_options[selected_market]
-    market_data = yf.download(market_symbol, start=start_date, end=end_date, auto_adjust=True)['Close']
-    market_returns = market_data.pct_change().dropna().squeeze()
-
-    # Convert market returns index to timezone-naive
-    market_returns.index = market_returns.index.tz_localize(None)
-
-    # Create comparison DataFrame
-    comparison_df = pd.DataFrame({
-        'Optimized Portfolio': weighted_optimized_portfolio_returns,
-        'Selected Portfolio': weighted_portfolio_returns,
-        selected_market: market_returns
-    })
-
-    # Drop rows with NaN values that may arise due to date mismatches
-    comparison_df = comparison_df.dropna()
-
-    # Plot comparison
-    comparison_fig = go.Figure()
-    comparison_fig.add_trace(go.Scatter(x=comparison_df.index, y=comparison_df['Optimized Portfolio'], mode='lines', name='Optimized Portfolio'))
-    comparison_fig.add_trace(go.Scatter(x=comparison_df.index, y=comparison_df['Selected Portfolio'], mode='lines', name='Selected Portfolio'))
-    comparison_fig.add_trace(go.Scatter(x=comparison_df.index, y=comparison_df[selected_market], mode='lines', name=selected_market))
-
-    comparison_fig.update_layout(
-        title=f'Historical Returns: Optimized Portfolio vs Selected Portfolio vs {selected_market}',
-        xaxis_title='Date',
-        yaxis_title='Cumulative Returns',
-        legend_title='Legend',
-        template='plotly_white'
-    )
-
-    # Display comparison plot
-    st.plotly_chart(comparison_fig)
-
-    # Plot historical rate of return as cumulative percentage return
-    rate_of_return_fig = go.Figure()
-
-    # Calculate cumulative return as percentage
-    optimized_portfolio_cumulative_return = (1 + comparison_df['Optimized Portfolio']).cumprod() - 1
-    selected_portfolio_cumulative_return = (1 + comparison_df['Selected Portfolio']).cumprod() - 1
-    market_cumulative_return = (1 + comparison_df[selected_market]).cumprod() - 1
-
-    # Add traces for the cumulative return
-    rate_of_return_fig.add_trace(go.Scatter(x=comparison_df.index, y=optimized_portfolio_cumulative_return * 100, mode='lines', name='Optimized Portfolio'))
-    rate_of_return_fig.add_trace(go.Scatter(x=comparison_df.index, y=selected_portfolio_cumulative_return * 100, mode='lines', name='Selected Portfolio'))
-    rate_of_return_fig.add_trace(go.Scatter(x=comparison_df.index, y=market_cumulative_return * 100, mode='lines', name=selected_market))
-
-    # Update layout with appropriate titles and labels
-    rate_of_return_fig.update_layout(
-        title=f'Historical Rate of Return (Cumulative Percentage): Optimized Portfolio vs Selected Portfolio vs {selected_market}',
-        xaxis_title='Date',
-        yaxis_title='Cumulative Return (%)',
-        legend_title='Legend',
-        template='plotly_white'
-    )
-
-    # Display historical rate of return plot
-    st.plotly_chart(rate_of_return_fig)
-
-# Step 8: Calculate the R alpha using CAPM forumula, beta using slope of regression through volitilty.
-def calculate_alpha_beta(portfolio_returns, market_returns, risk_free_rate):
-    """
-    Calculate alpha and beta for a portfolio using the CAPM model.
-    Alpha is the excess return relative to the market, adjusted for risk-free rate.
-    Beta measures the systematic risk of the portfolio.
-    """
-    # Ensure both series are tz-naive
-    portfolio_returns.index = portfolio_returns.index.tz_localize(None)
-    market_returns.index = market_returns.index.tz_localize(None)
-
-    # Ensure both series have the same length and drop NaN values
-    combined_df = pd.concat([portfolio_returns, market_returns], axis=1).dropna()
-    portfolio_returns = combined_df.iloc[:, 0]
-    market_returns = combined_df.iloc[:, 1]
-
-    # Perform linear regression to calculate beta (slope) and alpha (intercept)
-    X = market_returns.values.reshape(-1, 1)  # Independent variable (market returns)
-    y = portfolio_returns.values              # Dependent variable (portfolio returns)
-    X = np.hstack([np.ones_like(X), X])       # Add column for intercept
-    coef = np.linalg.lstsq(X, y, rcond=None)[0]  # Solve for regression coefficients
-    intercept, beta = coef[0], coef[1]        # Intercept and slope from regression
-
-    # Calculate average returns
-    R = portfolio_returns.sum()         # Portfolio return
-    Rm = market_returns.sum()          # Market return
-
-    # Calculate alpha using the CAPM formula
-    alpha = (R - risk_free_rate) - beta * (Rm - risk_free_rate)
-
-    return alpha, beta
-
-# Step 9: display the alpha and beta in a readable table
-def display_alpha_beta(results, weights_record, weights, tickers, start_date, end_date, risk_free_rate):
-    """
-    Calculate and display alpha and beta for the selected and optimized portfolios.
-    """
-    # Fetch portfolio returns and market returns
-    returns = get_data(tickers, start_date, end_date)
-    if returns is not None:
-        selected_portfolio_returns = (returns * weights).sum(axis=1)
-        max_sharpe_idx = np.argmax(results[2])
-        optimized_weights = weights_record[max_sharpe_idx]
-        optimized_portfolio_returns = (returns * optimized_weights).sum(axis=1)
-
-        # Fetch market data
-        market_symbol = market_options[selected_market]
-        market_data = yf.download(market_symbol, start=start_date, end=end_date, auto_adjust=True)['Close']
-        market_returns = market_data.pct_change().dropna()
-
-        # Calculate alpha and beta for both portfolios
-        selected_alpha, selected_beta = calculate_alpha_beta(selected_portfolio_returns, market_returns, risk_free_rate)
-        optimized_alpha, optimized_beta = calculate_alpha_beta(optimized_portfolio_returns, market_returns, risk_free_rate)
-
-        # Create a DataFrame to display the results
-        data = {
-            "Portfolio": ["Selected Portfolio", "Optimized Portfolio"],
-            "Alpha": [selected_alpha, optimized_alpha],
-            "Beta": [selected_beta, optimized_beta]
-        }
-        summary_df = pd.DataFrame(data)
-
-        # Display the table
-        st.write(summary_df)
-
-# Step 10: Add graph for tickers most likely to be big performers in the next year
-def display_top_performers(mean_returns, tickers):
-    # Example DataFrame where the tickers are the index and returns are the values
-    data = {
-        "Mean Returns": mean_returns
-    }
-
-    # Create DataFrame
-    df = pd.DataFrame(data, index=tickers)
-
-    # Sort the DataFrame by 'Mean Returns' column in descending order
-    df_sorted = df.sort_values(by="Mean Returns", ascending=False)
-
-    # Extract top tickers and their associated returns as arrays
-    top_tickers = df_sorted.index.to_numpy()  # Extract tickers
-    top_returns = df_sorted["Mean Returns"].to_numpy()  # Extract returns
-
-    # Custom color scale from dark gold to bright gold
-    color_scale = [
-        [0, 'rgb(204, 153, 0)'],  # Darker gold
-        [1, 'rgb(255, 215, 0)']   # Bright gold
-    ]
-
-    # Plot the bar chart with the custom color scale
+def plot_returns(frame, title, axis_title):
     fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=top_tickers[:10],  # Show top 10 performers
-        y=top_returns[:10],
-        name='Top Performers',
-        marker=dict(
-            color=top_returns[:10],  # Apply color based on the returns
-            colorscale=color_scale,  # Use the custom color scale
-            showscale=True           # Show the color scale bar
-        )
-    ))
-
+    for name in frame:
+        fig.add_trace(go.Scatter(x=frame.index, y=frame[name], mode="lines", name=name))
     fig.update_layout(
-        title='Top 10 Most Likely Big Performers in the Next Year',
-        xaxis_title='Ticker',
-        yaxis_title='Expected Return',
-        template='plotly_white'
+        title=title, xaxis_title="Date",
+        yaxis=dict(title=axis_title, tickformat=".1%"), template="plotly_white",
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def display_historical_comparison(prices, selected_weights, optimized_weights, market, start, end, rate):
+    st.subheader("Historical Portfolio & Market Comparison")
+    st.caption(
+        "In-sample (hindsight) comparison: optimized weights were chosen using the estimation history "
+        "above, not a separate training period. Both portfolios rebalance to their fixed weights each trading day. "
+        "Trading costs and taxes are excluded. Stocks use adjusted closes; the selected price index "
+        "does not include reinvested dividends. No currency conversion is performed."
+    )
+    try:
+        benchmark = load_prices([market_options[market]], start, end)
+        comparison, cumulative = pa.historical_comparison(
+            prices, benchmark, selected_weights, optimized_weights, market
+        )
+    except pa.PortfolioError as error:
+        st.error(f"Historical comparison unavailable: {error}")
+        return
+    st.caption(
+        f"Common comparison period: {cumulative.index[0]:%Y-%m-%d} to "
+        f"{cumulative.index[-1]:%Y-%m-%d} ({len(comparison)} daily returns). "
+        "All cumulative returns start at zero on the same closing date."
+    )
+    plot_returns(comparison, f"Daily Returns vs {market}", "Daily Return")
+    plot_returns(cumulative, f"Cumulative Returns vs {market}", "Cumulative Return")
+    st.subheader("Portfolio Alpha & Beta")
+    try:
+        rows = []
+        for name in comparison.columns[:-1]:
+            alpha, beta = pa.calculate_alpha_beta(comparison[name], comparison[market], rate)
+            rows.append({"Portfolio": name, "Annualized Alpha": alpha, "Beta": beta})
+    except pa.PortfolioError as error:
+        st.warning(str(error))
+    else:
+        st.caption(
+            "Alpha is the annualized daily excess-return intercept; beta measures sensitivity "
+            "to the market. The annual risk-free input is divided by 252 for daily calculations."
+        )
+        st.dataframe(
+            pd.DataFrame(rows).style.format({"Annualized Alpha": "{:.2%}", "Beta": "{:.3f}"}),
+            hide_index=True, use_container_width=True,
+        )
+
+
+def display_results(tickers, weights, start, end, rate, sample_count, market, sub_weight):
+    rate = pa.validate_risk_free_rate(rate)
+    with st.spinner("Loading prices and solving portfolio allocations..."):
+        prices = load_prices(tickers, start, end)
+        returns = pa.daily_returns(prices)
+        mean_returns, covariance = returns.mean(), returns.cov()
+        custom = pa.portfolio_performance(weights, mean_returns, covariance, rate)
+        optimization = pa.efficient_frontier(mean_returns, covariance, rate)
+        samples = pa.sample_portfolios(mean_returns, covariance, rate, sample_count)
+    if prices.attrs.get("trimmed_rows", 0):
+        st.warning(
+            "The available histories have different start or end dates. "
+            "Calculations use only their shared history, shown below."
+        )
+    if np.linalg.matrix_rank(covariance.to_numpy()) < len(tickers):
+        st.warning(
+            "Some return histories are redundant or too short to estimate independent risks. "
+            "Near-zero estimated risk may be misleading; use a longer history or remove redundant assets."
+        )
+    st.caption(
+        f"Estimation period: {prices.index[0]:%Y-%m-%d} to {prices.index[-1]:%Y-%m-%d}; "
+        f"{len(returns)} daily returns. Annual estimates use 252 trading days. "
+        "Expected return is an annualized arithmetic mean, not compound growth or a forecast."
+    )
+    st.plotly_chart(plot_efficient_frontier(optimization, samples, custom), use_container_width=True)
+    st.subheader("Portfolio Performance Metrics")
+    st.write(f"Expected Annual Return: {custom.annual_return:.3%}")
+    st.write(f"Expected Volatility: {custom.volatility:.3%}")
+    st.write(f"Sharpe Ratio: {sharpe_text(custom.sharpe)}")
+
+    optimized = optimization.maximum_sharpe
+    summary = [optimization.minimum_variance]
+    names = ["Minimum Variance"]
+    if optimized is None:
+        st.warning(
+            "A finite maximum Sharpe ratio is unavailable because a near-zero-volatility "
+            "portfolio is feasible. No maximum-Sharpe allocation or export is selected."
+        )
+    else:
+        summary.insert(0, optimized)
+        names.insert(0, "Maximum Sharpe Ratio (Optimized Portfolio)")
+    if (mean_returns * pa.TRADING_DAYS <= rate).all():
+        st.warning(
+            "All estimated asset returns are at or below the risk-free rate. "
+            "Maximizing a negative Sharpe ratio can favor higher risk; it is not a recommendation."
+        )
+    st.subheader("Portfolio Summary: Efficient Frontier")
+    summary_tab, samples_tab = st.tabs(["Summary", "Random Portfolio Data"])
+    summary_tab.dataframe(styled_metrics(portfolio_table(summary, names)), hide_index=True)
+    samples_tab.caption("Random allocations ranked by Sharpe ratio, not optimized frontier portfolios.")
+    samples_tab.dataframe(
+        styled_metrics(portfolio_table(samples).sort_values("Sharpe Ratio", ascending=False)),
+        hide_index=True,
     )
 
-    st.plotly_chart(fig)
+    optimized_weights = optimized.weights if optimized is not None else None
+    display_historical_comparison(prices, weights, optimized_weights, market, start, end, rate)
+    st.subheader("Correlation Matrix")
+    st.dataframe(returns.corr())
+    st.caption("Correlation is undefined (blank) for an asset with zero volatility.")
+    st.subheader("Historical Mean Returns")
+    historical_means = (mean_returns * pa.TRADING_DAYS).sort_values(ascending=False).head(10)
+    fig = go.Figure(go.Bar(x=historical_means.index, y=historical_means.values))
+    fig.update_layout(
+        title="Top Historical Mean Returns (Not a Forecast)", xaxis_title="Ticker",
+        yaxis=dict(title="Annualized Arithmetic Mean Return", tickformat=".1%"),
+        template="plotly_white",
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    if optimized is not None:
+        st.subheader("Optimized Sub-portfolio Allocation")
+        st.caption(
+            f"These allocations sum to {sub_weight:.1%} of a larger portfolio. "
+            "The rest of that larger portfolio is not modeled."
+        )
+        scaled = pd.DataFrame({
+            "Ticker": optimized.weights.index,
+            "Weight (%)": optimized.weights.to_numpy() * sub_weight * 100,
+        })
+        st.table(scaled)
+        st.download_button(
+            "Download Sub-portfolio CSV", data=scaled.to_csv(index=False),
+            file_name="sub-portfolio.csv", mime="text/csv",
+        )
+        st.download_button(
+            "Download Optimized Portfolio CSV", data=portfolio_csv(optimized.weights),
+            file_name="optimized-portfolio.csv", mime="text/csv",
+        )
 
-##################################################################################
-#                                                                                #
-# Application UI                                                                 #
-#                                                                                #                                               
-##################################################################################
 
-tickers = []
-weights = []
-sub_portfolio_percentage = 0.25
+def portfolio_csv(weights):
+    return pd.DataFrame([weights.index.tolist(), weights.tolist()]).to_csv(index=False, header=False)
+
 
 with st.sidebar:
-        st.header("Portfolio Selection")
-        # CSV upload
-        uploaded_file = st.file_uploader("Upload CSV File (TICKER, WEIGHT)", type=["csv"])
-
-        if uploaded_file is not None:
+    st.header("Portfolio Selection")
+    if "portfolio_tickers" not in st.session_state:
+        st.session_state["portfolio_tickers"] = "AAPL,MSFT,GOOGL,AMZN,TSLA"
+    uploaded_file = st.file_uploader("Upload Portfolio CSV", type=["csv"])
+    st.caption("CSV format: first row tickers, optional second row non-negative weights.")
+    if uploaded_file is not None:
+        content = uploaded_file.getvalue()
+        if content != st.session_state.get("portfolio_upload"):
             try:
-                df = pd.read_csv(uploaded_file, header=None)
-                if df.shape[0] == 1:
-                    tickers = df.iloc[0].tolist()
-                elif df.shape[0] == 2:
-                    tickers = df.iloc[0].tolist()
-                    weights = df.iloc[1].apply(pd.to_numeric, errors='coerce')
-                    weights = weights.tolist()
-                    if np.sum(weights) != 1:
-                        st.warning("Weights do not sum to 1; normalizing weights.")
-                        weights = weights / np.sum(weights)
-                else:
-                    st.error("CSV must have one or two rows (Tickers and Weights).")
-            except:
-                st.error("Error parsing given CSV file.")
-                
-        # Set default tickers if none exist.
-        if not tickers:
-            tickers = ["AAPL","MSFT","GOOGL","AMZN","TSLA"]
+                uploaded_tickers, uploaded_weights = pa.read_portfolio_csv(BytesIO(content))
+            except pa.PortfolioError as error:
+                st.error(str(error))
+                st.stop()
+            st.session_state["portfolio_tickers"] = ",".join(uploaded_tickers)
+            st.session_state["portfolio_weights"] = uploaded_weights.to_dict()
+            for ticker, weight in uploaded_weights.items():
+                for mode in ("Slider", "Number Input"):
+                    st.session_state[f"{mode}_weight_{ticker}"] = float(weight)
+            st.session_state["portfolio_upload"] = content
+        st.caption("Uploaded weights are matched by ticker and normalized to 100%.")
+    else:
+        st.session_state.pop("portfolio_upload", None)
+    ticker_input = st.text_input("Enter Tickers (Comma Separated)", key="portfolio_tickers")
+    try:
+        tickers = pa.validate_tickers(ticker_input)
+    except pa.PortfolioError as error:
+        st.error(str(error))
+        st.stop()
 
-        ticker_input = st.text_input("Enter Tickers (Comma Separated)", value=','.join(tickers))
-        tickers = [ticker.strip() for ticker in ticker_input.split(',')]
+    start_date = st.date_input("Start Date", value=pd.Timestamp("2020-01-01"))
+    today = pd.Timestamp.today().normalize()
+    last_business_day = today - pd.Timedelta(days=max(today.weekday() - 4, 0))
+    end_date = st.date_input("End Date", value=last_business_day)
+    st.caption("Start Date is inclusive; End Date is exclusive.")
+    try:
+        pa.validate_dates(start_date, end_date)
+    except pa.PortfolioError as error:
+        st.error(str(error))
+        st.stop()
 
-        start_date = st.date_input("Start Date", value=pd.to_datetime("2020-01-01"))
-        # Function to get the last business day
-        def get_last_business_day():
-            today = pd.to_datetime("today").normalize()  # Current date
-            # If today is a weekend (Saturday or Sunday), move to the previous Friday
-            if today.weekday() == 5:  # Saturday
-                last_business_day = today - pd.Timedelta(days=1)
-            elif today.weekday() == 6:  # Sunday
-                last_business_day = today - pd.Timedelta(days=2)
-            else:  # Weekdays
-                last_business_day = today
-            return last_business_day
+    selected_market = st.selectbox("Select Market Index to Compare", list(market_options))
+    try:
+        current_rate = load_risk_free_rate()
+    except pa.PortfolioError as error:
+        current_rate = None
+        st.warning(f"{error} Enter the annual risk-free rate manually before deploying.")
+    else:
+        st.text(f"Latest 10-year U.S. Treasury yield: {current_rate:.2%}")
+    risk_free_rate = st.number_input(
+        "Set Risk-Free Rate (Annual)", min_value=0.0, max_value=1.0,
+        value=current_rate, step=0.0001, format="%.4f",
+        help="Annual decimal rate: 0.04 means 4%. The Treasury yield is a proxy, not a guarantee.",
+    )
 
-        # Set the end date to the last business day
-        end_date = st.date_input("End Date", value=get_last_business_day())
+    input_method = st.radio("Choose Input Method for Portfolio Weights", ("Slider", "Number Input"))
+    st.subheader("Input Portfolio Weights")
+    previous_weights = st.session_state.get("portfolio_weights", {})
+    raw_weights = []
+    for ticker in tickers:
+        try:
+            name = load_asset_name(ticker)
+        except pa.PortfolioError as error:
+            st.warning(str(error))
+            name = ticker
+        key = f"{input_method}_weight_{ticker}"
+        if key not in st.session_state:
+            default = 1 / len(tickers) if not previous_weights else 0.0
+            st.session_state[key] = float(previous_weights.get(ticker, default))
+        widget = st.slider if input_method == "Slider" else st.number_input
+        raw_weights.append(widget(
+            f"Weight for {ticker} ({name}):", min_value=0.0, max_value=1.0,
+            format="%.4f", step=0.0001, key=key,
+        ))
+    st.session_state["portfolio_weights"] = dict(zip(tickers, raw_weights))
+    try:
+        weights = pa.normalize_weights(raw_weights, tickers)
+    except pa.PortfolioError as error:
+        st.error(str(error))
+        st.stop()
+    if not np.isclose(sum(raw_weights), 1, rtol=0, atol=1e-8):
+        st.warning(
+            f"Weights total {sum(raw_weights):.2%}. Calculations and CSV downloads use "
+            "the same proportions, normalized to 100%."
+        )
+    sub_portfolio_percentage = st.number_input(
+        "Set Sub-portfolio Weighting", min_value=0.0, max_value=1.0,
+        value=0.25, step=0.0001, format="%.4f",
+        help="Fraction of a larger portfolio assigned to the optimized allocation.",
+    )
+    st.download_button(
+        "Download Portfolio CSV", data=portfolio_csv(weights),
+        file_name="portfolio.csv", mime="text/csv",
+    )
 
-        # Find the current risk free rate
-        def get_risk_free_rate():
-            ticker = "^TNX"  # Symbol for 10 year US Treasury Bill yield
-            data = yf.Ticker(ticker)
-            # Get the most recent closing value of the yield
-            rate = data.history(period="1d")
-            # If there is an error getting the Risk free rate, give 0.0
-            if(len(rate) == 0):
-                return 0.0
-            rate = rate['Close'].iloc[-1] / 100  # Convert to decimal (e.g., 4.5% -> 0.045)
-            return rate
-
-        # Set the selected comparison market index
-        selected_market = st.selectbox("Select Market Index to Compare", list(market_options.keys()))
-
-        # Get the current risk-free rate
-        risk_free_rate = get_risk_free_rate()
-        st.text(f'The current risk-free rate for a  10-year US Treasury Bill yield of {risk_free_rate:.4f}%')
-        risk_free_rate = st.number_input("Set Risk-Free Rate (Annual)", min_value=0.0, max_value=1.0, value=risk_free_rate, step=0.0001, format="%.4f", help="Risk-free rate for calculating Sharpe ratio.")
-
-        input_method = st.radio("Choose Input Method for Portfolio Weights", ('Slider', 'Number Input'))
-        st.subheader("Input Portfolio Weights")
-
-        if len(weights) <= 0:
-            weights = [1 / len(tickers)] * len(tickers)
-
-        elif len(weights) < len(tickers):  # If the ticker-weight matrix is not square
-            st.warning("A new ticker has been added, please review wights as they may have been adjusted.")
-            # Extend the weights array by adding 0 for the new tickers
-            weights = np.concatenate([weights, np.zeros(len(tickers) - len(weights))])
-
-        for i, ticker in enumerate(tickers):
-            name = yf.Ticker(ticker).get_info()['shortName']
-            if input_method == 'Slider':
-                weight = st.slider(f"Weight for {ticker} ({name}):", min_value=0.0, max_value=1.0, value=weights[i], format="%0.4f", step=0.0001)
-                weights[i] = weight
-            else:
-                weight = st.number_input(f"Weight for {ticker} ({name}):", min_value=0.0, max_value=1.0, value=weights[i], format="%0.4f", step=0.0001)
-                weights[i] = weight
-
-        weights = np.array(weights)
-        if np.sum(weights) != 1:
-            st.warning("Weights do not sum to 1; normalizing weights.")
-            weights = weights / np.sum(weights)
-
-        sub_portfolio_percentage = st.number_input("Set Sub-portfolio Weighting", min_value=0.0, max_value=1.0, value=sub_portfolio_percentage, step=0.0001, format="%.4f", help="Sub-portfolio weighting.")
-
-        # Check if tickers or weights are empty
-        if len(tickers) <= 0:
-            st.warning("No tickers or weights provided. Please input tickers and weights.")
-        else:
-            # Create a DataFrame with two rows: one for tickers and one for weights
-            df = pd.DataFrame([tickers, weights])
-
-            # Convert DataFrame to CSV
-            csv = df.to_csv(index=False, header=False)
-
-            # Convert the CSV string into a BytesIO object
-            csv_file = io.StringIO(csv)
-
-            # Add download button for CSV file
-            st.download_button(
-                label="Download Portfolio CSV",
-                data=csv_file.getvalue(),
-                file_name="portfolio.csv",
-                mime="text/csv"
-            )
-
-num_portfolios=5000
-num_portfolios_input_method = st.radio("Select Number of Portfolios for Efficient Frontier", ('Slider', 'Number Input'))
-if num_portfolios_input_method=='Slider': 
-    num_portfolios = st.slider("Select Number of Portfolios for Efficient Frontier", min_value=100, max_value=10000, value=5000, step=100)
-else:
-    num_portfolios = st.number_input("Number of Portfolios", min_value=100, value=num_portfolios)
-
+sample_method = st.radio("Random Portfolio Sample Input", ("Slider", "Number Input"))
+sample_widget = st.slider if sample_method == "Slider" else st.number_input
+num_portfolios = sample_widget(
+    "Number of Random Portfolio Samples", min_value=100, max_value=10000, value=5000, step=100,
+)
+st.caption(
+    "Random samples are visual context only. The efficient frontier and optimal allocations "
+    "are solved separately and do not depend on the sample count."
+)
 if st.button("Deploy Efficient Frontier"):
-    returns = get_data(tickers, start_date, end_date)
-    if returns is not None:
-        mean_returns = returns.mean()
-        cov_matrix = returns.cov()
-        custom_return, custom_std_dev, custom_sharpe = portfolio_performance(weights, mean_returns, cov_matrix, risk_free_rate)
-        results, weights_record = efficient_frontier(mean_returns, cov_matrix, num_portfolios, risk_free_rate)
-        fig = plot_efficient_frontier(results, weights_record, weights, custom_return, custom_std_dev, tickers)
-        st.plotly_chart(fig)
-        st.subheader("Portfolio Performance Metrics")
-        st.write(f"Expected Annual Return: {custom_return:.3%}")
-        st.write(f"Expected Volatility: {custom_std_dev:.3%}")
-        st.write(f"Sharpe Ratio: {(custom_return - risk_free_rate) / custom_std_dev:.3f}")
-        portfolio_summary_table(results, weights_record, tickers)
-        st.subheader("Optimized & Select Portfolio Backtest")
-        portfolio_backtest(results, weights_record, weights, tickers, start_date, end_date)
-        st.subheader("Optimized & Selected Portfolio Alpha,Beta")
-        display_alpha_beta(results, weights_record, weights, tickers, start_date, end_date, risk_free_rate)
-        st.subheader("Correlation Matrix")
-        display_correlation_matrix(returns, tickers)
-        st.subheader("Predictive Strongest Performers (Mean-Return Analysis)")
-        display_top_performers(mean_returns, tickers)
-        st.subheader("Subportfolio Header")
-        max_sharpe_idx = np.argmax(results[2])
-        optimized_portfolio_weights = weights_record[max_sharpe_idx]
-        df = pd.DataFrame([tickers, optimized_portfolio_weights])
-        # Scale the optimized portfolio weights
-        scaled_weights = optimized_portfolio_weights * sub_portfolio_percentage
-
-        # Create a DataFrame to display the stock tickers and their scaled weights
-        scaled_weights_df = pd.DataFrame({
-            "Ticker": tickers,
-            "Weight (%)": scaled_weights * 100
-        })
-
-        # Display the table in the app
-        st.table(scaled_weights_df)
-
-        # Option to download the scaled weights as CSV
-        csv_scaled = scaled_weights_df.to_csv(index=False)
-        st.download_button(
-            label="Download Sub-portfolio CSV",
-            data=csv_scaled,
-            file_name="sub-portfolio.csv",
-            mime="text/csv"
+    try:
+        display_results(
+            tickers, weights, start_date, end_date, risk_free_rate, int(num_portfolios),
+            selected_market, sub_portfolio_percentage,
         )
+    except pa.PortfolioError as error:
+        st.error(str(error))
 
-        # Download CSV for Optimized Portfolio
-        # Create a DataFrame with two rows: one for tickers and one for weights
-        # Convert DataFrame to CSV
-        csv = df.to_csv(index=False, header=False)
-        # Convert the CSV string into a BytesIO object
-        csv_file = io.StringIO(csv)
-        # Add download button for CSV file
-        st.download_button(
-            label="Download Optimized Portfolio CSV",
-            data=csv_file.getvalue(),
-            file_name="optimized-portfolio.csv",
-            mime="text/csv"
-        )
-
-      
-
-
-            
-
-# Page Information Ref. -- footer
 linkedin_image = f"""
 <div style="
     position: fixed;
@@ -582,9 +409,6 @@ linkedin_image = f"""
     font-size: small;
     ">
     © 2024 Merrimack Computer Club | <a href="https://github.com/Merrimack-Computer-Club" target="_blank">Github</a> Authors Alexander Elguezabal <a href="{AUTHOR_URL}" target="_blank">LinkedIn</a>
-
 </div>
 """
-
-# Render the clickable image
 st.markdown(linkedin_image, unsafe_allow_html=True)
