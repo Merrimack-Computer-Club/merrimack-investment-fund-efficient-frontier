@@ -31,9 +31,14 @@ class AnalystPageTests(unittest.TestCase):
 
     def select_index(self):
         app = AppTest.from_file(str(PAGE)).run()
+        self.assertIn("Settings > Theme", app.sidebar.caption[0].value)
         self.assertEqual(app.sidebar.selectbox[0].options, ["", *INDEX_SOURCES])
         app.sidebar.selectbox[0].select("Dow Jones (USA)").run()
         self.assertEqual(len(app.exception), 0)
+        self.assertIn(
+            f"Constituent source: {INDEX_SOURCES['Dow Jones (USA)']}",
+            "\n".join(markdown.value for markdown in app.markdown),
+        )
         return app
 
     @patch("analyst_data.get_stock_data")
@@ -43,7 +48,10 @@ class AnalystPageTests(unittest.TestCase):
         load_stocks.return_value = (self.stocks, self.issues)
         app = self.select_index()
         self.assertEqual(app.dataframe[0].value["Ticker"].tolist(), ["AAPL", "MSFT"])
-        self.assertIn("analyst targets available for 1", app.caption[-1].value)
+        self.assertIn(
+            "analyst targets available for 1",
+            "\n".join(caption.value for caption in app.caption),
+        )
         app.run()
         self.assertEqual(load_stocks.call_count, 1)
         app.sidebar.button[0].click().run()

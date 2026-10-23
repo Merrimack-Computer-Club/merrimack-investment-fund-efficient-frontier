@@ -10,6 +10,9 @@ from analyst_data import (
 
 
 st.set_page_config(page_title="Global Analyst Reversion Tool", layout="wide")
+st.sidebar.caption(
+    "Appearance: use the top-right menu > Settings > Theme to choose light or dark."
+)
 st.title("🌐 Global Analyst Mean Reversion Tool")
 st.markdown("""
 Welcome to the **Global Analyst Reversion Tool**!
@@ -49,7 +52,7 @@ if index_option:
         load_constituents.clear()
         load_stock_data.clear()
 
-    st.caption(f"Constituent source: {INDEX_SOURCES[index_option]}")
+    st.markdown(f"Constituent source: {INDEX_SOURCES[index_option]}")
     if index_option == "Nikkei 225 (Japan)":
         st.caption(
             "The Nikkei constituent source is dated January 2024; "
@@ -71,7 +74,7 @@ if index_option:
                 "Available prices are retained when only the analyst target fails."
             )
             with st.expander("Data request details"):
-                st.dataframe(issues, use_container_width=True, hide_index=True)
+                st.dataframe(issues, width="stretch", hide_index=True)
         if stock_df.empty:
             st.warning("No valid stock prices were retrieved. Try refreshing the data later.")
         else:
@@ -92,6 +95,6 @@ if index_option:
                     ascending=[False, True],
                     na_position="last",
                 ).reset_index(drop=True),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
