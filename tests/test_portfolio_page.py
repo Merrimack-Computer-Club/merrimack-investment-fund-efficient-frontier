@@ -82,6 +82,46 @@ class PortfolioPageTests(unittest.TestCase):
         self.assertEqual(self.download.call_count, 2)
         self.assertEqual(len(self.charts(app)[0]["data"][0]["x"]), 200)
 
+    def test_all_charts_use_native_theme_and_consistent_non_color_series_cues(self):
+        app = self.deploy(self.app())
+        charts = self.charts(app)
+        self.assertEqual(len(charts), 4)
+        for element, chart in zip(app.get("plotly_chart"), charts):
+            self.assertEqual(element.proto.theme, "streamlit")
+            for layout in (chart["layout"], chart["layout"]["template"]["layout"]):
+                self.assertNotIn("paper_bgcolor", layout)
+                self.assertNotIn("plot_bgcolor", layout)
+                self.assertNotIn("color", layout.get("font", {}))
+            for axis in ("xaxis", "yaxis"):
+                for font in (chart["layout"][axis]["tickfont"], chart["layout"][axis]["title"]["font"]):
+                    self.assertGreaterEqual(font["size"], 19)
+                    self.assertEqual(font["weight"], 700)
+                    self.assertNotIn("color", font)
+            self.assertEqual(chart["layout"]["legend"]["orientation"], "h")
+
+        template = charts[0]["layout"]["template"]["layout"]
+        palette = template["colorway"]
+        samples, frontier, custom, optimized = charts[0]["data"]
+        self.assertEqual(samples["marker"]["colorscale"], template["colorscale"]["sequential"])
+        self.assertEqual(frontier["line"]["color"], palette[0])
+        self.assertEqual(custom["marker"]["color"], palette[2])
+        self.assertEqual(optimized["marker"]["color"], palette[1])
+        self.assertEqual(custom["marker"]["symbol"], "star")
+        self.assertEqual(optimized["marker"]["symbol"], "diamond")
+        for chart in charts[1:3]:
+            traces = {trace["name"]: trace for trace in chart["data"]}
+            self.assertEqual(traces["Optimized Portfolio"]["line"], {"color": palette[1], "dash": "solid"})
+            self.assertEqual(traces["Selected Portfolio"]["line"], {"color": palette[2], "dash": "dash"})
+            self.assertEqual(traces["S&P 500"]["line"], {"color": palette[3], "dash": "dot"})
+        self.assertEqual(charts[3]["layout"]["xaxis"]["tickmode"], "linear")
+        self.assertEqual(charts[3]["layout"]["xaxis"]["dtick"], 1)
+
+    def test_theme_help_and_attribution_use_native_text(self):
+        app = self.app()
+        self.assertIn("Settings > Theme", self.text(app.sidebar.caption))
+        self.assertIn("Authors Alexander Elguezabal", self.text(app.markdown))
+        self.assertNotIn("position: fixed", self.text(app.markdown))
+
     def test_reordered_tickers_keep_their_own_weights_and_returns(self):
         app = self.app()
         app.sidebar.text_input[0].set_value("MSFT,AAPL").run()
@@ -232,6 +272,11 @@ class PortfolioPageTests(unittest.TestCase):
         self.assertNotIn("Download Optimized Portfolio CSV", labels)
         self.assertNotIn("Download Sub-portfolio CSV", labels)
         self.assertNotIn("Optimized Portfolio", [trace["name"] for trace in self.charts(app)[1]["data"]])
+        chart = self.charts(app)[0]
+        self.assertEqual(
+            chart["data"][0]["marker"]["color"],
+            chart["layout"]["template"]["layout"]["colorway"][4],
+        )
 
     def test_zero_volatility_benchmark_reports_undefined_alpha_beta(self):
         self.benchmark[:] = 100.0

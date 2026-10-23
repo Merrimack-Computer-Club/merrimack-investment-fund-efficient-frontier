@@ -10,10 +10,14 @@ import portfolio_analysis as pa
 
 AUTHOR_URL = "https://www.linkedin.com/in/alex-elguezabal/"
 WEBSITE_URL = "https://merrimackcomputer.club/"
+CHART_LABEL_FONT = dict(size=19, weight=700)
 
 st.set_page_config(
     page_title="Merrimack Computer Club Portfolio Analysis Tool",
     layout="wide", page_icon="assets/merrimack-computer-club.png",
+)
+st.sidebar.caption(
+    "Appearance: use the top-right menu > Settings > Theme to choose light or dark."
 )
 
 mcc_image = f"""
@@ -98,17 +102,44 @@ def styled_metrics(frame):
     }, na_rep="Undefined")
 
 
+def chart_figure(data=None):
+    fig = go.Figure(data, layout=dict(template="streamlit"))
+    # Native Plotly axis gray needs large, bold text to meet contrast in light mode.
+    fig.update_layout(
+        font=CHART_LABEL_FONT,
+        xaxis=dict(
+            tickfont=CHART_LABEL_FONT, nticks=4,
+            title=dict(font=CHART_LABEL_FONT, standoff=12),
+        ),
+        yaxis=dict(
+            tickfont=CHART_LABEL_FONT, nticks=4,
+            title=dict(font=CHART_LABEL_FONT, standoff=12),
+        ),
+        hoverlabel=dict(font=CHART_LABEL_FONT),
+        legend=dict(orientation="h", x=0, xanchor="left", y=-0.25, yanchor="top"),
+        margin=dict(t=75, b=155),
+        height=520,
+    )
+    return fig
+
+
 def plot_efficient_frontier(optimization, samples, custom):
     colors = [portfolio.sharpe if portfolio.sharpe is not None else np.nan for portfolio in samples]
     has_sharpe = any(portfolio.sharpe is not None for portfolio in samples)
-    fig = go.Figure()
+    fig = chart_figure()
+    palette = fig.layout.template.layout.colorway
     fig.add_trace(go.Scatter(
         x=[portfolio.volatility for portfolio in samples],
         y=[portfolio.annual_return for portfolio in samples],
         mode="markers", name="Random portfolios (not optimized)",
         marker=dict(
-            color=colors if has_sharpe else "lightgray",
-            size=5, showscale=has_sharpe, colorbar=dict(title="Sharpe"),
+            color=colors if has_sharpe else palette[4],
+            colorscale=fig.layout.template.layout.colorscale.sequential,
+            size=5, showscale=has_sharpe,
+            colorbar=dict(
+                title=dict(text="Sharpe", font=CHART_LABEL_FONT),
+                tickfont=CHART_LABEL_FONT, nticks=4, thickness=12, outlinewidth=0,
+            ),
         ),
         text=[portfolio_hover(portfolio) for portfolio in samples], hoverinfo="text",
     ))
@@ -116,13 +147,13 @@ def plot_efficient_frontier(optimization, samples, custom):
         x=[portfolio.volatility for portfolio in optimization.frontier],
         y=[portfolio.annual_return for portfolio in optimization.frontier],
         mode="lines+markers", name="Efficient frontier",
-        line=dict(color="darkblue", width=3),
+        line=dict(color=palette[0], width=3),
         text=[portfolio_hover(portfolio) for portfolio in optimization.frontier],
         hoverinfo="text",
     ))
-    highlights = [("Custom Portfolio", custom, "red", "star")]
+    highlights = [("Custom Portfolio", custom, palette[2], "star")]
     if optimization.maximum_sharpe is not None:
-        highlights.append(("Maximum Sharpe Portfolio", optimization.maximum_sharpe, "green", "diamond"))
+        highlights.append(("Maximum Sharpe Portfolio", optimization.maximum_sharpe, palette[1], "diamond"))
     for name, portfolio, color, symbol in highlights:
         fig.add_trace(go.Scatter(
             x=[portfolio.volatility], y=[portfolio.annual_return], name=name,
@@ -131,22 +162,28 @@ def plot_efficient_frontier(optimization, samples, custom):
         ))
     fig.update_layout(
         title="Efficient Frontier with Custom Portfolio",
-        xaxis=dict(title="Annual Volatility (Std Dev)", tickformat=".0%"),
-        yaxis=dict(title="Expected Annual Return", tickformat=".0%"),
+        xaxis=dict(title=dict(text="Annual Volatility (Std Dev)"), tickformat=".0%"),
+        yaxis=dict(title=dict(text="Expected Annual Return"), tickformat=".0%"),
         showlegend=True,
     )
     return fig
 
 
 def plot_returns(frame, title, axis_title):
-    fig = go.Figure()
+    fig = chart_figure()
+    palette = fig.layout.template.layout.colorway
+    styles = {"Optimized Portfolio": (1, "solid"), "Selected Portfolio": (2, "dash")}
     for name in frame:
-        fig.add_trace(go.Scatter(x=frame.index, y=frame[name], mode="lines", name=name))
+        color_index, dash = styles.get(name, (3, "dot"))
+        fig.add_trace(go.Scatter(
+            x=frame.index, y=frame[name], mode="lines", name=name,
+            line=dict(color=palette[color_index], dash=dash),
+        ))
     fig.update_layout(
-        title=title, xaxis_title="Date",
-        yaxis=dict(title=axis_title, tickformat=".1%"), template="plotly_white",
+        title=title, xaxis_title_text="Date",
+        yaxis=dict(title=dict(text=axis_title), tickformat=".1%"),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch", theme="streamlit")
 
 
 def display_historical_comparison(prices, selected_weights, optimized_weights, market, start, end, rate):
@@ -187,7 +224,7 @@ def display_historical_comparison(prices, selected_weights, optimized_weights, m
         )
         st.dataframe(
             pd.DataFrame(rows).style.format({"Annualized Alpha": "{:.2%}", "Beta": "{:.3f}"}),
-            hide_index=True, use_container_width=True,
+            hide_index=True, width="stretch",
         )
 
 
@@ -215,7 +252,10 @@ def display_results(tickers, weights, start, end, rate, sample_count, market, su
         f"{len(returns)} daily returns. Annual estimates use 252 trading days. "
         "Expected return is an annualized arithmetic mean, not compound growth or a forecast."
     )
-    st.plotly_chart(plot_efficient_frontier(optimization, samples, custom), use_container_width=True)
+    st.plotly_chart(
+        plot_efficient_frontier(optimization, samples, custom),
+        width="stretch", theme="streamlit",
+    )
     st.subheader("Portfolio Performance Metrics")
     st.write(f"Expected Annual Return: {custom.annual_return:.3%}")
     st.write(f"Expected Volatility: {custom.volatility:.3%}")
@@ -253,13 +293,14 @@ def display_results(tickers, weights, start, end, rate, sample_count, market, su
     st.caption("Correlation is undefined (blank) for an asset with zero volatility.")
     st.subheader("Historical Mean Returns")
     historical_means = (mean_returns * pa.TRADING_DAYS).sort_values(ascending=False).head(10)
-    fig = go.Figure(go.Bar(x=historical_means.index, y=historical_means.values))
+    fig = chart_figure(go.Bar(x=historical_means.index, y=historical_means.values))
     fig.update_layout(
-        title="Top Historical Mean Returns (Not a Forecast)", xaxis_title="Ticker",
-        yaxis=dict(title="Annualized Arithmetic Mean Return", tickformat=".1%"),
-        template="plotly_white",
+        title="Top Historical Mean Returns<br>(Not a Forecast)", xaxis_title_text="Ticker",
+        xaxis=dict(tickmode="linear", dtick=1),
+        yaxis=dict(title=dict(text="Annualized Arithmetic Mean Return"), tickformat=".1%"),
+        margin=dict(b=100), height=450,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch", theme="streamlit")
     if optimized is not None:
         st.subheader("Optimized Sub-portfolio Allocation")
         st.caption(
@@ -398,17 +439,8 @@ if st.button("Deploy Efficient Frontier"):
     except pa.PortfolioError as error:
         st.error(str(error))
 
-linkedin_image = f"""
-<div style="
-    position: fixed;
-    bottom: 0;
-    width: 100%;
-    background-color: #f1f1f1;
-    text-align: center;
-    padding: 10px;
-    font-size: small;
-    ">
-    © 2024 Merrimack Computer Club | <a href="https://github.com/Merrimack-Computer-Club" target="_blank">Github</a> Authors Alexander Elguezabal <a href="{AUTHOR_URL}" target="_blank">LinkedIn</a>
-</div>
-"""
-st.markdown(linkedin_image, unsafe_allow_html=True)
+st.markdown(
+    "© 2024 Merrimack Computer Club | "
+    "[Github](https://github.com/Merrimack-Computer-Club) "
+    f"Authors Alexander Elguezabal [LinkedIn]({AUTHOR_URL})"
+)
