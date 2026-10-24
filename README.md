@@ -18,7 +18,9 @@ First, clone this repository to your local machine.
 
 ### Step 2: Install Dependencies
 
-Install the required Python packages using `pip`.
+Use Python 3.11 or 3.12 and install the required Python packages using `pip`.
+Streamlit 1.51.0 is pinned because it is the first release that supports custom
+light and dark themes together. The other dependency pins are unchanged.
 
 ```bash
 pip install -r requirements.txt
@@ -41,6 +43,59 @@ This will start a local web server and open the app in your browser.
 3. **Adjust Weights**: Use sliders or number inputs to assign non-negative weights. At least one weight must be positive. The app normalizes the proportions to sum to 1 and keeps each weight attached to its ticker when you reorder the list.
 4. **Deploy Efficient Frontier**: Click "Deploy Efficient Frontier" to solve the portfolio allocations and compare your portfolio.
 5. **View Results**: The plot shows an optimized frontier line, separately labeled random allocation samples, and your custom portfolio. Changing the number of random samples does not change the optimized allocations.
+
+## Appearance: Light and Dark Themes
+
+Open the **top-right menu > Settings > Theme** and choose **Light**, **Dark**,
+or **Use system setting**. Both pages use the same themes. Streamlit remembers
+your choice in this browser, including when you navigate between pages.
+Switching appearance does not change your inputs, allocations, or exports.
+If you change your device's appearance while using **Use system setting**,
+reload the page to apply it. Choosing **Light** or **Dark** directly updates
+the existing charts without a reload.
+
+The palette comes from the blue-and-white Computer Club logo in
+`assets/merrimack-computer-club.png`, not Merrimack College's navy-and-gold branding.
+Light mode uses a white canvas and a pale blue sidebar; dark mode uses a near-black
+canvas, charcoal input surfaces, and brighter blue links. Controls, tables, notices, and Plotly text
+and backgrounds follow the selected theme. The attribution at the end of the
+portfolio page uses native text instead of a fixed, light-colored overlay.
+
+### Customizing the palettes
+
+Edit `.streamlit/config.toml` from the repository root:
+
+- `[theme.light]` and `[theme.dark]` define background, text, links, controls,
+  table headers, and status colors. Their `.sidebar` sections customize sidebar
+  surfaces; other values are inherited.
+- `[theme]` defines shared chart colors. In Streamlit 1.51, chart palettes belong
+  here, **not** in the light/dark sections. Keeping one palette preserves each
+  series' identity and avoids depending on a reload to change Plotly data colors.
+  All configured chart colors contrast with both chart backgrounds.
+- The first five `chartCategoricalColors` entries mean blue frontier/bars, teal
+  optimized portfolio, amber selected portfolio, violet benchmark, and gray
+  samples with undefined Sharpe ratios. Keep these roles in the same order.
+  `chartSequentialColors` must contain exactly ten ordered shades for the Sharpe
+  scale. A colorbar and numerical hover values explain that scale.
+- Keep primary colors dark enough for **white button labels** in both themes.
+  Dark-mode canvas/sidebar backgrounds are near-black so the same primary blue
+  also passes 4.5:1 when used for small slider values.
+  Aim for at least 4.5:1 text contrast and 3:1 control/chart contrast. The tests
+  check these pairs, including faded captions and table headers. Keep links in
+  native Markdown, not captions, because Streamlit fades the entire caption.
+  Stars, diamonds, labels, and
+  distinct historical-return line styles also distinguish series without color.
+- Plotly axis, colorbar, and hover labels use 19px bold text: Streamlit's native
+  light-mode axis gray meets the 3:1 large-text threshold, but not 4.5:1 for small
+  text. Keep those labels large and bold. Legends sit below the plots so they
+  do not overlap the colorbar or squeeze the plot on narrow screens.
+
+Restart Streamlit after changing the configuration, and check both modes.
+Chart code uses the native `streamlit` Plotly template and its palette, rather
+than fixed white backgrounds or per-user server-side theme changes. Avoid
+overriding chart text/backgrounds with fixed colors, and run the regression tests
+after palette edits. See the [Streamlit theming guide](https://docs.streamlit.io/develop/concepts/configuration/theming)
+and the [1.51 release notes](https://docs.streamlit.io/develop/quick-reference/release-notes/2025#version-1510).
 
 ## Example
 
@@ -156,7 +211,7 @@ with their mean analyst price targets from Yahoo Finance.
 
 ## Regression tests
 
-Run the offline numerical, CSV/data-validation, and Streamlit interaction tests
+Run the offline numerical, CSV/data-validation, theme/contrast, and Streamlit interaction tests
 after installing `requirements.txt`. They also cover the analyst page without
 making network requests:
 

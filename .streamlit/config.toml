@@ -1,0 +1,70 @@
+[theme]
+showSidebarBorder = true
+# Keep series identities stable when switching themes. Each color works on both canvases.
+# Roles: frontier/bars, optimized, selected, benchmark, undefined Sharpe, extra series.
+chartCategoricalColors = [
+    "#157BB9", "#168477", "#B86B2C", "#8A67B5", "#6E7E8E",
+    "#C15B76", "#798522", "#A571B0", "#428890", "#A97946",
+]
+chartSequentialColors = [
+    "#2F72A0", "#3576A4", "#3B7AA8", "#4080AC", "#4684B0",
+    "#4B88B4", "#518CB8", "#5691BC", "#5C95C0", "#6199C4",
+]
+
+[theme.light]
+primaryColor = "#006BA6"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F5FA"
+textColor = "#0B1723"
+linkColor = "#0067A3"
+codeTextColor = "#07517C"
+borderColor = "#71869A"
+dataframeBorderColor = "#CCD9E5"
+dataframeHeaderBackgroundColor = "#E5EEF6"
+showWidgetBorder = true
+blueColor = "#006BA6"
+blueBackgroundColor = "#E5F2FB"
+blueTextColor = "#07517C"
+greenColor = "#19734F"
+greenBackgroundColor = "#E4F4EB"
+greenTextColor = "#145C40"
+yellowColor = "#8A6500"
+yellowBackgroundColor = "#FFF4D2"
+yellowTextColor = "#704D00"
+redColor = "#B83C50"
+redBackgroundColor = "#FDECF0"
+redTextColor = "#8D2036"
+
+[theme.light.sidebar]
+backgroundColor = "#F0F5FA"
+secondaryBackgroundColor = "#FFFFFF"
+
+[theme.dark]
+# Streamlit uses white labels on primary-colored buttons in both modes.
+primaryColor = "#167CB5"
+# Near-black also gives small, primary-colored slider values 4.5:1 contrast.
+backgroundColor = "#010203"
+secondaryBackgroundColor = "#202A35"
+textColor = "#EDF5FC"
+linkColor = "#69C5F4"
+codeTextColor = "#ABDFFA"
+borderColor = "#71869A"
+dataframeBorderColor = "#3B4C5E"
+dataframeHeaderBackgroundColor = "#243343"
+showWidgetBorder = true
+blueColor = "#69C5F4"
+blueBackgroundColor = "#1B3043"
+blueTextColor = "#ABDFFA"
+greenColor = "#6FC7A1"
+greenBackgroundColor = "#1C312B"
+greenTextColor = "#9BDABC"
+yellowColor = "#E4BC5F"
+yellowBackgroundColor = "#342E20"
+yellowTextColor = "#F3D483"
+redColor = "#F18A9A"
+redBackgroundColor = "#39232D"
+redTextColor = "#FFB0BC"
+
+[theme.dark.sidebar]
+backgroundColor = "#010203"
+secondaryBackgroundColor = "#151B23"
