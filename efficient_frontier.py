@@ -38,6 +38,7 @@ This tool helps users visualize and optimize investment portfolios using the
 - **Portfolio Customization**: Adjust weights and compare annual return, volatility, and Sharpe ratio.
 - **Market Comparison**: Compare historical daily and cumulative returns with a market index.
 - **Alpha & Beta Analysis**: Compare annualized excess return and sensitivity to the market.
+- **Fama-French Analysis**: Estimate market, size, and value factor exposures.
 - **Interactive Tools**: Upload/download portfolio CSVs and set an annual risk-free rate.
 - **Visualization**: Explore the frontier, asset correlations, and historical mean returns.
 
@@ -63,6 +64,11 @@ def load_risk_free_rate():
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_asset_name(ticker):
     return pa.get_asset_name(ticker)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_fama_french_factors():
+    return pa.download_fama_french_factors()
 
 
 def sharpe_text(value):
@@ -228,6 +234,84 @@ def display_historical_comparison(prices, selected_weights, optimized_weights, m
         )
 
 
+def factor_exposure_summary(name, regression):
+    if regression.market_beta > 1.1:
+        market = "above-market sensitivity"
+    elif regression.market_beta < 0.9:
+        market = "below-market sensitivity"
+    else:
+        market = "roughly market-level sensitivity"
+    if regression.smb_beta > 0.1:
+        size = "a small-cap tilt"
+    elif regression.smb_beta < -0.1:
+        size = "a large-cap tilt"
+    else:
+        size = "little size tilt"
+    if regression.hml_beta > 0.1:
+        value = "a value tilt"
+    elif regression.hml_beta < -0.1:
+        value = "a growth tilt"
+    else:
+        value = "little value/growth tilt"
+    return f"**{name}:** {market}, {size}, and {value} over this sample."
+
+
+def display_fama_french_analysis(returns, selected_weights, optimized_weights):
+    st.subheader("Fama-French Three-Factor Analysis")
+    st.markdown(
+        "The regression estimates `portfolio excess return = alpha + "
+        "market beta * (Mkt-RF) + size beta * SMB + value beta * HML`. "
+        "SMB is the historical return of small companies minus big companies; "
+        "HML is high book-to-market (value) minus low book-to-market (growth)."
+    )
+    try:
+        factors = load_fama_french_factors()
+        portfolios = [("Selected Portfolio", selected_weights)]
+        if optimized_weights is not None:
+            portfolios.insert(0, ("Optimized Portfolio", optimized_weights))
+        results = [
+            (name, pa.fama_french_regression(pa.weighted_returns(returns, weights), factors))
+            for name, weights in portfolios
+        ]
+    except pa.PortfolioError as error:
+        st.warning(f"Fama-French analysis unavailable: {error}")
+        return
+
+    rows = [{
+        "Portfolio": name,
+        "Annualized Alpha": result.annual_alpha,
+        "Market Beta": result.market_beta,
+        "SMB Beta": result.smb_beta,
+        "HML Beta": result.hml_beta,
+        "R-squared": result.r_squared,
+        "Observations": result.observations,
+    } for name, result in results]
+    st.dataframe(
+        pd.DataFrame(rows).style.format({
+            "Annualized Alpha": "{:.2%}",
+            "Market Beta": "{:.3f}",
+            "SMB Beta": "{:.3f}",
+            "HML Beta": "{:.3f}",
+            "R-squared": "{:.1%}",
+        }, na_rep="Undefined"),
+        hide_index=True, width="stretch",
+    )
+    for name, result in results:
+        st.markdown(factor_exposure_summary(name, result))
+    first_result = results[0][1]
+    st.caption(
+        f"Factor overlap: {first_result.start_date:%Y-%m-%d} to "
+        f"{first_result.end_date:%Y-%m-%d}. Alpha is the daily intercept multiplied by 252; "
+        "R-squared is the share of variation explained in-sample. The official US daily "
+        "factor data supplies its own one-month T-bill risk-free return, so this regression "
+        "does not use the sidebar's 10-year Treasury input. Exposures are historical "
+        "co-movements, not forecasts or proof of manager skill. They are most applicable "
+        "to US equities and may be misleading for international assets or mixed currencies. "
+        "[Source: Kenneth French Data Library]"
+        "(https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html)."
+    )
+
+
 def display_results(tickers, weights, start, end, rate, sample_count, market, sub_weight):
     rate = pa.validate_risk_free_rate(rate)
     with st.spinner("Loading prices and solving portfolio allocations..."):
@@ -288,6 +372,7 @@ def display_results(tickers, weights, start, end, rate, sample_count, market, su
 
     optimized_weights = optimized.weights if optimized is not None else None
     display_historical_comparison(prices, weights, optimized_weights, market, start, end, rate)
+    display_fama_french_analysis(returns, weights, optimized_weights)
     st.subheader("Correlation Matrix")
     st.dataframe(returns.corr())
     st.caption("Correlation is undefined (blank) for an asset with zero volatility.")

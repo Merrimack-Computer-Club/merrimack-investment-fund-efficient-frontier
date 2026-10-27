@@ -1,7 +1,9 @@
 """Validated, long-only portfolio calculations independent of Streamlit."""
 
 from dataclasses import dataclass
+from io import BytesIO, StringIO
 import re
+from zipfile import BadZipFile, ZipFile
 
 import numpy as np
 import pandas as pd
@@ -15,6 +17,11 @@ from yfinance.exceptions import YFException
 TRADING_DAYS = 252
 FEASIBILITY_TOL = 1e-7
 ZERO_VOLATILITY = 1e-8
+FAMA_FRENCH_DAILY_URL = (
+    "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/"
+    "F-F_Research_Data_Factors_daily_CSV.zip"
+)
+FAMA_FRENCH_COLUMNS = ["Mkt-RF", "SMB", "HML", "RF"]
 
 
 class PortfolioError(ValueError):
@@ -34,6 +41,18 @@ class Optimization:
     frontier: list[Portfolio]
     minimum_variance: Portfolio
     maximum_sharpe: Portfolio | None
+
+
+@dataclass(frozen=True)
+class FactorRegression:
+    annual_alpha: float
+    market_beta: float
+    smb_beta: float
+    hml_beta: float
+    r_squared: float | None
+    observations: int
+    start_date: pd.Timestamp
+    end_date: pd.Timestamp
 
 
 def validate_tickers(values):
@@ -176,6 +195,65 @@ def get_asset_name(ticker):
     if not isinstance(info, dict) or not info.get("shortName"):
         raise PortfolioError(f"Company name unavailable for {ticker}.")
     return info["shortName"]
+
+
+def parse_fama_french_factors(content):
+    """Parse Kenneth French's zipped daily US three-factor data into decimal returns."""
+    if not isinstance(content, bytes) or not content:
+        raise PortfolioError("The Fama-French factor download is empty.")
+    try:
+        with ZipFile(BytesIO(content)) as archive:
+            csv_names = [name for name in archive.namelist() if name.lower().endswith(".csv")]
+            if len(csv_names) != 1:
+                raise PortfolioError("The Fama-French archive must contain exactly one CSV file.")
+            text = archive.read(csv_names[0]).decode("utf-8-sig")
+    except (BadZipFile, KeyError, UnicodeDecodeError) as error:
+        raise PortfolioError(f"Could not read the Fama-French factor archive: {error}") from error
+
+    lines = text.splitlines()
+    expected_header = ["", *FAMA_FRENCH_COLUMNS]
+    header_index = next(
+        (
+            index for index, line in enumerate(lines)
+            if [value.strip() for value in line.split(",")] == expected_header
+        ),
+        None,
+    )
+    if header_index is None:
+        raise PortfolioError("The Fama-French factor CSV does not contain the expected columns.")
+    try:
+        frame = pd.read_csv(StringIO("\n".join(lines[header_index:])), dtype=str)
+    except pd.errors.ParserError as error:
+        raise PortfolioError(f"Could not parse the Fama-French factor CSV: {error}") from error
+    frame.columns = [column.strip() for column in frame.columns]
+    date_column = frame.columns[0]
+    dates = frame[date_column].str.strip()
+    frame = frame.loc[dates.str.fullmatch(r"\d{8}", na=False)].copy()
+    if frame.empty:
+        raise PortfolioError("The Fama-French factor CSV does not contain daily observations.")
+    try:
+        index = pd.to_datetime(frame.pop(date_column).str.strip(), format="%Y%m%d", errors="raise")
+        factors = frame.loc[:, FAMA_FRENCH_COLUMNS].apply(pd.to_numeric, errors="raise") / 100
+    except (KeyError, TypeError, ValueError) as error:
+        raise PortfolioError(f"The Fama-French factor CSV contains invalid values: {error}") from error
+    factors.index = pd.DatetimeIndex(index, name="Date")
+    factors = factors.sort_index()
+    if factors.index.has_duplicates or not np.isfinite(factors.to_numpy()).all():
+        raise PortfolioError("The Fama-French factors require unique dates and finite values.")
+    return factors
+
+
+def download_fama_french_factors():
+    try:
+        response = requests.get(
+            FAMA_FRENCH_DAILY_URL,
+            headers={"User-Agent": "Merrimack-Portfolio-Analysis/1.0"},
+            timeout=30,
+        )
+        response.raise_for_status()
+    except requests.RequestException as error:
+        raise PortfolioError(f"Could not download Fama-French factors: {error}") from error
+    return parse_fama_french_factors(response.content)
 
 
 def validate_risk_free_rate(rate):
@@ -441,3 +519,71 @@ def calculate_alpha_beta(portfolio_returns, market_returns, risk_free_rate):
     daily_rate = rate / TRADING_DAYS
     alpha = float(((portfolio.mean() - daily_rate) - beta * (market.mean() - daily_rate)) * TRADING_DAYS)
     return alpha, beta
+
+
+def fama_french_regression(portfolio_returns, factors):
+    """Fit Rp - Rf = alpha + beta_m(Mkt-RF) + beta_s(SMB) + beta_h(HML)."""
+    if not isinstance(portfolio_returns, pd.Series) or not isinstance(
+        portfolio_returns.index, pd.DatetimeIndex
+    ):
+        raise PortfolioError("Fama-French analysis requires dated daily portfolio returns.")
+    portfolio = portfolio_returns.copy()
+    portfolio.index = portfolio.index.tz_localize(None).normalize()
+    if (
+        portfolio.index.has_duplicates or portfolio.index.hasnans
+        or not np.isfinite(portfolio.to_numpy(dtype=float)).all()
+    ):
+        raise PortfolioError(
+            "Fama-French analysis requires unique dates and complete finite portfolio returns."
+        )
+    if (
+        not isinstance(factors, pd.DataFrame)
+        or not isinstance(factors.index, pd.DatetimeIndex)
+        or factors.index.has_duplicates or factors.index.hasnans
+        or any(column not in factors for column in FAMA_FRENCH_COLUMNS)
+    ):
+        raise PortfolioError(
+            "Fama-French factors require unique dates and Mkt-RF, SMB, HML, and RF columns."
+        )
+    factor_data = factors.loc[:, FAMA_FRENCH_COLUMNS].copy()
+    factor_data.index = factor_data.index.tz_localize(None).normalize()
+    try:
+        factor_data = factor_data.astype(float)
+    except (TypeError, ValueError) as error:
+        raise PortfolioError("Fama-French factors must be numeric.") from error
+    if not np.isfinite(factor_data.to_numpy()).all():
+        raise PortfolioError("Fama-French factors must be complete and finite.")
+
+    combined = pd.concat(
+        [portfolio.rename("Portfolio"), factor_data], axis=1, join="inner"
+    ).sort_index()
+    if len(combined) < 5:
+        raise PortfolioError(
+            "Fama-French analysis needs at least five shared daily return observations."
+        )
+    design = np.column_stack(
+        [np.ones(len(combined)), combined[["Mkt-RF", "SMB", "HML"]].to_numpy()]
+    )
+    excess_returns = (combined["Portfolio"] - combined["RF"]).to_numpy()
+    coefficients, _, rank, _ = np.linalg.lstsq(design, excess_returns, rcond=None)
+    if rank < design.shape[1]:
+        raise PortfolioError(
+            "Fama-French regression is undefined because the factor history is collinear."
+        )
+    fitted = design @ coefficients
+    residual_sum_squares = float(np.sum((excess_returns - fitted) ** 2))
+    total_sum_squares = float(np.sum((excess_returns - excess_returns.mean()) ** 2))
+    r_squared = (
+        1 - residual_sum_squares / total_sum_squares
+        if total_sum_squares > 1e-20 else None
+    )
+    return FactorRegression(
+        annual_alpha=float(coefficients[0] * TRADING_DAYS),
+        market_beta=float(coefficients[1]),
+        smb_beta=float(coefficients[2]),
+        hml_beta=float(coefficients[3]),
+        r_squared=r_squared,
+        observations=len(combined),
+        start_date=combined.index[0],
+        end_date=combined.index[-1],
+    )
