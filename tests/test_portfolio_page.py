@@ -30,9 +30,17 @@ class PortfolioPageTests(unittest.TestCase):
             {"^GSPC": np.r_[1, np.cumprod(1 + rng.normal(0.0005, 0.008, 40))] * 100},
             index=dates,
         )
+        factor_values = np.random.default_rng(456).normal(0, 0.01, (40, 3))
+        self.factors = pd.DataFrame(
+            factor_values, index=dates[1:], columns=["Mkt-RF", "SMB", "HML"]
+        )
+        self.factors["RF"] = 0.0001
         self.download = self.start_patch("portfolio_analysis.download_prices", side_effect=self.price_response)
         self.rate = self.start_patch("portfolio_analysis.get_risk_free_rate", return_value=0.045)
         self.names = self.start_patch("portfolio_analysis.get_asset_name", side_effect=lambda ticker: ticker)
+        self.factor_data = self.start_patch(
+            "portfolio_analysis.download_fama_french_factors", return_value=self.factors
+        )
 
     def tearDown(self):
         st.cache_data.clear()
@@ -259,6 +267,27 @@ class PortfolioPageTests(unittest.TestCase):
             np.testing.assert_allclose(cumulative["y"][1:], np.cumprod(1 + np.array(daily["y"])) - 1)
         self.assertIn("Annualized Alpha", app.dataframe[2].value.columns)
         self.assertIn("Not a Forecast", charts[3]["layout"]["title"]["text"])
+
+    def test_fama_french_section_reports_and_interprets_factor_exposures(self):
+        app = self.deploy(self.app())
+        self.assertIn("Fama-French Three-Factor Analysis", self.text(app.subheader))
+        factor_table = next(
+            table.value for table in app.dataframe if "SMB Beta" in table.value.columns
+        )
+        self.assertEqual(
+            factor_table["Portfolio"].tolist(),
+            ["Optimized Portfolio", "Selected Portfolio"],
+        )
+        self.assertEqual(factor_table["Observations"].tolist(), [40, 40])
+        self.assertIn("small companies minus big companies", self.text(app.markdown))
+        self.assertIn("Kenneth French Data Library", self.text(app.caption))
+
+    def test_unavailable_factor_data_does_not_hide_portfolio_results(self):
+        self.factor_data.side_effect = pa.PortfolioError("Factor service unavailable")
+        app = self.deploy(self.app())
+        self.assertIn("Fama-French analysis unavailable", self.text(app.warning))
+        self.assertIn("Expected Annual Return", self.text(app.markdown))
+        self.assertEqual(len(self.charts(app)), 4)
 
     def test_constant_prices_show_undefined_sharpe_without_optimized_exports(self):
         self.prices[:] = 100.0

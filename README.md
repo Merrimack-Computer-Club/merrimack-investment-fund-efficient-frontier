@@ -8,6 +8,8 @@ This Streamlit application allows users to input a portfolio of stock tickers, s
 - **Adjust Portfolio Weights**: Dynamic sliders allow users to specify the weight of each stock in the portfolio.
 - **Efficient Frontier Calculation**: The app computes the Efficient Frontier, which is a set of optimal portfolios that provide the best possible return for a given level of risk.
 - **Custom Portfolio Comparison**: Users can compare their custom portfolio to the Efficient Frontier.
+- **Fama-French Three-Factor Analysis**: The selected and optimized portfolios are
+  regressed on the US market, size, and value factors.
 - **Interactive Visualization**: The results are displayed on an interactive graph using Plotly, where the Efficient Frontier and the custom portfolio are plotted.
 
 ## Getting Started
@@ -42,7 +44,7 @@ This will start a local web server and open the app in your browser.
 2. **Set Date Range**: Specify the start and end dates for historical data fetching.
 3. **Adjust Weights**: Use sliders or number inputs to assign non-negative weights. At least one weight must be positive. The app normalizes the proportions to sum to 1 and keeps each weight attached to its ticker when you reorder the list.
 4. **Deploy Efficient Frontier**: Click "Deploy Efficient Frontier" to solve the portfolio allocations and compare your portfolio.
-5. **View Results**: The plot shows an optimized frontier line, separately labeled random allocation samples, and your custom portfolio. Changing the number of random samples does not change the optimized allocations.
+5. **View Results**: The plot shows an optimized frontier line, separately labeled random allocation samples, and your custom portfolio. Changing the number of random samples does not change the optimized allocations. The results also show each portfolio's historical market, size, and value factor exposures.
 
 ## Appearance: Light and Dark Themes
 
@@ -142,6 +144,15 @@ Here’s a quick example of how to use the app:
   alpha is the daily excess-return intercept multiplied by 252. Alpha is not
   calculated by adding up a varying number of daily returns and subtracting an
   annual rate. Both values are undefined if the benchmark has no variation.
+- **Fama-French analysis explains returns with three factors.** The app fits an
+  ordinary least-squares regression to the selected portfolio and, when available,
+  the maximum-Sharpe portfolio:
+  `Rp - Rf = alpha + beta_market(Mkt-RF) + beta_size(SMB) + beta_value(HML)`.
+  A positive SMB beta indicates historical co-movement with smaller companies,
+  while a negative value indicates a large-cap tilt. A positive HML beta indicates
+  a value tilt and a negative value indicates a growth tilt. The daily intercept
+  is multiplied by 252 for annualized alpha; R-squared reports the in-sample share
+  of excess-return variation explained by the factors.
 
 ### Limitations
 
@@ -160,6 +171,15 @@ closes, while the selected market indexes are **price indexes**, not comparable
 dividend-reinvested total-return indexes. The page explicitly notes this
 benchmark limitation. Yahoo data and company names are cached for one hour;
 request failures are shown, not cached as successful data.
+
+The Fama-French regression uses the official daily US research factors and their
+one-month T-bill risk-free series, not the sidebar's 10-year Treasury input. The
+factor dataset is updated on its own schedule, so its overlap can end before the
+selected price history. The model is most applicable to US equities; international
+assets, mixed currencies, short samples, and omitted factors can make the
+coefficients misleading. Alpha and factor loadings are historical estimates, not
+forecasts, causal claims, or proof of investment skill. The app does not calculate
+standard errors or statistical significance.
 
 ### Portfolio CSV Format
 
@@ -183,6 +203,9 @@ upload-format portfolio.
 - [William Sharpe, The Sharpe Ratio](https://web.stanford.edu/~wfsharpe/art/sr/SR.htm): excess returns and consistent time periods.
 - [pandas 2.2 `pct_change`](https://pandas.pydata.org/pandas-docs/version/2.2/reference/api/pandas.DataFrame.pct_change.html): fractional returns and explicit `fill_method=None`.
 - [SciPy SLSQP](https://docs.scipy.org/doc/scipy-1.14.1/reference/optimize.minimize-slsqp.html): constrained numerical optimization.
+- [Kenneth French Data Library](https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html):
+  official daily US market, SMB, HML, and risk-free factor data used by the
+  three-factor regression.
 
 ## Analyst Recommendations
 

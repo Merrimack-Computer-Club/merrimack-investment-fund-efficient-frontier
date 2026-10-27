@@ -1,6 +1,7 @@
-from io import StringIO
+from io import BytesIO, StringIO
 import unittest
 from unittest.mock import patch
+from zipfile import ZipFile
 
 import numpy as np
 import pandas as pd
@@ -8,6 +9,18 @@ from scipy.optimize import OptimizeResult
 from yfinance.exceptions import YFRateLimitError
 
 import portfolio_analysis as pa
+
+
+def factor_archive(rows):
+    content = (
+        "Created from test data.\n\n"
+        ",Mkt-RF,SMB,HML,RF\n"
+        f"{rows}\n\nCopyright test"
+    )
+    buffer = BytesIO()
+    with ZipFile(buffer, "w") as archive:
+        archive.writestr("F-F_Research_Data_Factors_daily.csv", content)
+    return buffer.getvalue()
 
 
 class PortfolioInputTests(unittest.TestCase):
@@ -381,6 +394,65 @@ class HistoricalComparisonTests(unittest.TestCase):
                 pa.calculate_alpha_beta(market, invalid, 0.04)
         with self.assertRaisesRegex(pa.PortfolioError, "missing"):
             pa.weighted_returns(pd.DataFrame({"A": [np.nan]}), pd.Series([1], index=["A"]))
+
+
+class FamaFrenchTests(unittest.TestCase):
+    def test_parser_reads_daily_percentages_and_ignores_archive_footer(self):
+        factors = pa.parse_fama_french_factors(factor_archive(
+            "20240102, 1.00, -0.50, 0.25, 0.01\n"
+            "20240103, -2.00, 0.75, -0.10, 0.02"
+        ))
+        self.assertEqual(factors.columns.tolist(), pa.FAMA_FRENCH_COLUMNS)
+        self.assertEqual(factors.index.tolist(), [
+            pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03"),
+        ])
+        np.testing.assert_allclose(factors.iloc[0], [0.01, -0.005, 0.0025, 0.0001])
+
+    @patch("portfolio_analysis.requests.get")
+    def test_downloader_uses_official_archive_with_timeout(self, get):
+        get.return_value.content = factor_archive(
+            "20240102, 1.00, -0.50, 0.25, 0.01"
+        )
+        result = pa.download_fama_french_factors()
+        self.assertEqual(len(result), 1)
+        self.assertEqual(get.call_args.args[0], pa.FAMA_FRENCH_DAILY_URL)
+        self.assertEqual(get.call_args.kwargs["timeout"], 30)
+        get.return_value.raise_for_status.assert_called_once()
+
+    def test_regression_recovers_alpha_and_factor_exposures(self):
+        dates = pd.bdate_range("2024-01-01", periods=30)
+        values = np.random.default_rng(2026).normal(0, 0.01, (len(dates), 3))
+        factors = pd.DataFrame(values, index=dates, columns=["Mkt-RF", "SMB", "HML"])
+        factors["RF"] = 0.0001
+        portfolio = (
+            factors["RF"] + 0.0002 + 1.2 * factors["Mkt-RF"]
+            - 0.3 * factors["SMB"] + 0.5 * factors["HML"]
+        )
+        result = pa.fama_french_regression(portfolio, factors)
+        self.assertAlmostEqual(result.annual_alpha, 0.0002 * 252)
+        self.assertAlmostEqual(result.market_beta, 1.2)
+        self.assertAlmostEqual(result.smb_beta, -0.3)
+        self.assertAlmostEqual(result.hml_beta, 0.5)
+        self.assertAlmostEqual(result.r_squared, 1)
+        self.assertEqual(result.observations, 30)
+        self.assertEqual(result.start_date, dates[0])
+        self.assertEqual(result.end_date, dates[-1])
+
+    def test_regression_rejects_insufficient_and_collinear_factor_history(self):
+        dates = pd.bdate_range("2024-01-01", periods=6)
+        factors = pd.DataFrame({
+            "Mkt-RF": np.arange(6) / 100,
+            "SMB": np.arange(6) / 100,
+            "HML": np.arange(6) / 100,
+            "RF": np.zeros(6),
+        }, index=dates)
+        portfolio = pd.Series(np.arange(6) / 100, index=dates)
+        with self.assertRaisesRegex(pa.PortfolioError, "collinear"):
+            pa.fama_french_regression(portfolio, factors)
+        with self.assertRaisesRegex(pa.PortfolioError, "five shared"):
+            pa.fama_french_regression(portfolio.iloc[:4], factors)
+        with self.assertRaises(pa.PortfolioError):
+            pa.parse_fama_french_factors(b"not a zip file")
 
 
 if __name__ == "__main__":
